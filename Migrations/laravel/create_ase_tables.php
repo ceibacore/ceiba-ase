@@ -7,21 +7,31 @@ return new class extends Migration
 {
     public function up()
     {
+        $prefix = env('ASE_DB_PREFIX', 'ase_');
         $sql = file_get_contents(__DIR__ . '/../pure_sql/001_initial_schema.sql');
+        
+        // Replace default 'ase_' prefix with configured one if different
+        if ($prefix !== 'ase_') {
+            $sql = str_replace('ase_', $prefix, $sql);
+        }
+        
         DB::unprepared($sql);
     }
 
     public function down()
     {
+        $prefix = env('ASE_DB_PREFIX', 'ase_');
         DB::statement('SET FOREIGN_KEY_CHECKS=0;');
-        DB::statement('DROP TABLE IF EXISTS ase_transactions_log');
-        DB::statement('DROP TABLE IF EXISTS ase_invoices');
-        DB::statement('DROP TABLE IF EXISTS ase_subscriptions');
-        DB::statement('DROP TABLE IF EXISTS ase_orders');
-        DB::statement('DROP TABLE IF EXISTS ase_gateways');
-        DB::statement('DROP TABLE IF EXISTS ase_custom_prices');
-        DB::statement('DROP TABLE IF EXISTS ase_plan_prices');
-        DB::statement('DROP TABLE IF EXISTS ase_plans');
+        
+        $tables = [
+            'transactions_log', 'invoices', 'subscriptions', 'orders', 
+            'gateways', 'custom_prices', 'plan_prices', 'plans'
+        ];
+
+        foreach ($tables as $table) {
+            DB::statement("DROP TABLE IF EXISTS {$prefix}{$table}");
+        }
+
         DB::statement('SET FOREIGN_KEY_CHECKS=1;');
     }
 };

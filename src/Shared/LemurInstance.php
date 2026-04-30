@@ -19,7 +19,7 @@ class LemurInstance
             'db'       => self::getEnv('ASE_DB_NAME'),
             'username' => self::getEnv('ASE_DB_USER'),
             'password' => self::getEnv('ASE_DB_PASS'),
-            'prefix'   => '', // Tables are already prefixed with ase_
+            'prefix'   => self::getEnv('ASE_DB_PREFIX', 'ase_'),
         ]);
     }
 

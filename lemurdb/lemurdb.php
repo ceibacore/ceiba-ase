@@ -93,7 +93,16 @@ class LemurDB {
      * @return LemurQuery
      */
     public function query(string $table): LemurQuery {
-        return new LemurQuery($this->pdo, $table, $this->config['prefix'] ?? '');
+        return new LemurQuery($this->pdo, $table, $this->getPrefix());
+    }
+
+    /**
+     * Get the table prefix.
+     *
+     * @return string
+     */
+    public function getPrefix(): string {
+        return $this->config['prefix'] ?? '';
     }
 
     /**

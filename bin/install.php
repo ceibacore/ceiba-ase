@@ -8,7 +8,12 @@ echo "Installing Agnostic Subscription Engine (ASE) tables...\n";
 
 try {
     $db = LemurInstance::get();
+    $prefix = $_ENV['ASE_DB_PREFIX'] ?? getenv('ASE_DB_PREFIX') ?: 'ase_';
     $sql = file_get_contents(__DIR__ . '/../Migrations/pure_sql/001_initial_schema.sql');
+    
+    if ($prefix !== 'ase_') {
+        $sql = str_replace('ase_', $prefix, $sql);
+    }
     
     $statements = array_filter(array_map('trim', explode(';', $sql)));
     
