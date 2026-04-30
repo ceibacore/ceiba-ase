@@ -1,0 +1,14 @@
+{
+    "name": "lemur-bookstores/lemur-ase",
+    "description": "Agnostic Subscription Engine",
+    "type": "library",
+    "require": {
+        "php": ">=8.1",
+        "ramsey/uuid": "^4.7"
+    },
+    "autoload": {
+        "psr-4": {
+            "LemurAse\\": "src/"
+        }
+    }
+}
