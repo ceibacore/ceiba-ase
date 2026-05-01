@@ -37,4 +37,9 @@ final class EntityId
     {
         return $this->shortId;
     }
+
+    public function __toString(): string
+    {
+        return $this->uuid;
+    }
 }

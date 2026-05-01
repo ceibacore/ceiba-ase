@@ -24,14 +24,28 @@ final class StripeAdapter implements PaymentGatewayInterface
 
     public function parseWebhookEvent(array $payload): array
     {
-        // Normalize Stripe event to ASE internal format
+        $type = $payload['type'] ?? 'unknown';
+        $data = $payload['data']['object'] ?? [];
+
+        $action = match ($type) {
+            'checkout.session.completed' => 'INITIAL_PAYMENT',
+            'invoice.paid' => 'RENEWAL_PAYMENT',
+            'invoice.payment_failed' => 'PAYMENT_FAILED',
+            'customer.subscription.deleted', 'customer.subscription.canceled' => 'SUBSCRIPTION_CANCELED',
+            'customer.subscription.updated' => 'SUBSCRIPTION_UPDATED',
+            default => 'IGNORED'
+        };
+
         return [
-            'external_order_id' => $payload['data']['object']['id'] ?? null,
+            'action' => $action,
+            'external_order_id' => $data['id'] ?? null,
+            'external_subscription_id' => $data['subscription'] ?? $data['id'] ?? null,
             'external_transaction_id' => $payload['id'] ?? null,
-            'amount' => ($payload['data']['object']['amount_total'] ?? 0) / 100,
-            'currency' => strtoupper($payload['data']['object']['currency'] ?? 'USD'),
+            'internal_order_id' => $data['metadata']['order_id'] ?? $data['client_reference_id'] ?? null,
+            'amount' => ($data['amount_total'] ?? $data['amount_paid'] ?? 0) / 100,
+            'currency' => strtoupper($data['currency'] ?? 'USD'),
             'status' => 'paid',
-            'external_client_id' => $payload['data']['object']['client_reference_id'] ?? null,
+            'external_client_id' => $data['client_reference_id'] ?? $data['customer'] ?? null,
             'raw_payload' => $payload
         ];
     }

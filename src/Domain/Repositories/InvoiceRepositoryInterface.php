@@ -10,4 +10,9 @@ interface InvoiceRepositoryInterface
     public function save(Invoice $invoice): void;
     public function findById(EntityId $id): ?Invoice;
     public function getNextInvoiceNumber(string $externalClientId): string;
+    
+    /**
+     * @return Invoice[]
+     */
+    public function findByClient(string $clientId): array;
 }

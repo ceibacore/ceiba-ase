@@ -56,6 +56,21 @@ final class LemurInvoiceRepository implements InvoiceRepositoryInterface
         return "INV-" . strtoupper(substr($externalClientId, 0, 5)) . "-" . str_pad($next, 5, '0', STR_PAD_LEFT);
     }
 
+    public function findByClient(string $clientId): array
+    {
+        $db = LemurInstance::get();
+        $rows = $db->query(TableNames::INVOICES)
+            ->where(['external_client_id' => $clientId])
+            ->orderby('issued_at DESC') // Typically invoices are shown newest first
+            ->get();
+            
+        $entities = [];
+        foreach ($rows as $row) {
+            $entities[] = $this->mapToEntity($row);
+        }
+        return $entities;
+    }
+
     private function mapToEntity(array $row): Invoice
     {
         return new Invoice(

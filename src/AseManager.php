@@ -99,7 +99,7 @@ final class AseManager
     }
 
     /**
-     * Process an incoming webhook.
+     * Process an incoming webhook using the built-in adapter for validation.
      */
     public static function handleWebhook(string $gatewayProvider, array $payload, array $headers): bool
     {
@@ -111,10 +111,20 @@ final class AseManager
         }
 
         $eventData = $adapter->parseWebhookEvent($payload);
+        return self::processValidatedEvent($eventData['action'] ?? 'UNKNOWN', $eventData);
+    }
 
-        // We only process 'paid' status for this demo
-        if ($eventData['status'] !== 'paid') {
-            return true; // Acknowledge non-payment events without action
+    /**
+     * Process a webhook event that has already been validated and parsed by the host system.
+     * This is useful if the host uses official SDKs (like stripe-php) to construct the event.
+     */
+    public static function processValidatedEvent(string $action, array $normalizedData): bool
+    {
+        $manager = self::getInstance();
+
+        // If the adapter or host didn't recognize the event as a standard action, ignore it
+        if ($action === 'UNKNOWN' || $action === 'IGNORED') {
+            return true; 
         }
 
         $useCase = new ProcessWebhook(
@@ -125,7 +135,7 @@ final class AseManager
             $manager->planPriceRepo
         );
 
-        return $useCase->execute($eventData);
+        return $useCase->execute($action, $normalizedData);
     }
 
     /**
@@ -141,7 +151,19 @@ final class AseManager
         }
 
         // Return the first active one as array
-        return $subs[0]; 
+        $sub = $subs[0];
+        return [
+            'id' => $sub->id()->uuid(),
+            'order_id' => $sub->orderId()->uuid(),
+            'external_client_id' => $sub->externalClientId(),
+            'plan_price_id' => $sub->planPriceId()->uuid(),
+            'gateway_id' => $sub->gatewayId()->uuid(),
+            'status' => $sub->status(),
+            'current_period_start' => $sub->currentPeriodStart()?->format('Y-m-d H:i:s'),
+            'current_period_end' => $sub->currentPeriodEnd()?->format('Y-m-d H:i:s'),
+            'canceled_at' => $sub->canceledAt()?->format('Y-m-d H:i:s'),
+            'external_subscription_id' => $sub->externalSubscriptionId()
+        ];
     }
 
     /**
@@ -152,8 +174,28 @@ final class AseManager
         $manager = self::getInstance();
         $invoices = $manager->invoiceRepo->findByClient($clientId);
         
-        // Simple manual limit
-        return array_slice($invoices, 0, $limit);
+        $result = [];
+        foreach (array_slice($invoices, 0, $limit) as $inv) {
+            $result[] = [
+                'id' => $inv->id()->uuid(),
+                'order_id' => $inv->orderId()->uuid(),
+                'subscription_id' => $inv->subscriptionId()?->uuid(),
+                'external_client_id' => $inv->externalClientId(),
+                'invoice_number' => $inv->invoiceNumber(),
+                'subtotal' => $inv->subtotal(),
+                'tax_amount' => $inv->taxAmount(),
+                'total' => $inv->total()->amount(),
+                'currency' => $inv->total()->currency()->toString(),
+                'period_start' => $inv->periodStart()?->format('Y-m-d H:i:s'),
+                'period_end' => $inv->periodEnd()?->format('Y-m-d H:i:s'),
+                'status' => $inv->status(),
+                'issued_at' => $inv->issuedAt()?->format('Y-m-d H:i:s'),
+                'due_at' => $inv->dueAt()?->format('Y-m-d H:i:s'),
+                'paid_at' => $inv->paidAt()?->format('Y-m-d H:i:s')
+            ];
+        }
+        
+        return $result;
     }
 
     /**
@@ -173,13 +215,20 @@ final class AseManager
             return false;
         }
 
-        foreach ($subs as $subData) {
+        foreach ($subs as $sub) {
             // Check if the plan matches (requires JOIN in a real scenario, but simplified here)
             // Assuming we check the end date + grace period
-            $endDate = new \DateTimeImmutable($subData['current_period_end']);
+            $endDate = $sub->currentPeriodEnd();
+            
+            if (!$endDate) {
+                if ($sub->status() === 'active') {
+                    return true;
+                }
+                continue;
+            }
             
             // Assuming 3 days grace period for past_due
-            if ($subData['status'] === 'past_due') {
+            if ($sub->status() === 'past_due') {
                 $endDate = $endDate->modify('+3 days');
             }
 

@@ -17,7 +17,10 @@ final class PriceCalculator
         $customPrice = $this->customPriceRepo->findByClientAndPlanPrice($clientId, $planPrice->id());
 
         if ($customPrice !== null) {
-            return Money::create($customPrice->amount(), $planPrice->price()->currency());
+            $isValid = $customPrice->valid_until === null || $customPrice->valid_until > new \DateTimeImmutable();
+            if ($isValid) {
+                return Money::create($customPrice->amount, $planPrice->price()->currency());
+            }
         }
 
         return $planPrice->price();

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error de Configuración - ASE</title>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #111827;
+            color: #f3f4f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: #1f2937;
+            padding: 40px;
+            border-radius: 12px;
+            border: 1px solid #374151;
+            max-width: 500px;
+            text-align: left;
+        }
+        .badge {
+            background: #ef4444;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 20px;
+            display: inline-block;
+        }
+        h1 {
+            font-size: 24px;
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #f9fafb;
+        }
+        p {
+            color: #9ca3af;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+        pre {
+            background: #000;
+            padding: 15px;
+            border-radius: 6px;
+            color: #10b981;
+            overflow-x: auto;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <span class="badge">Agnostic Subscription Engine</span>
+        <h1>Error de Configuración</h1>
+        <p>El módulo ASE no ha sido configurado correctamente en el entorno anfitrión. Faltan variables de entorno requeridas para la conexión a la base de datos o claves de seguridad.</p>
+        
+        <p>Por favor, asegúrate de definir las siguientes variables en tu archivo <code>.env</code>:</p>
+        
+        <pre>
+ASE_DB_HOST=localhost
+ASE_DB_PORT=3306
+ASE_DB_NAME=tu_base_de_datos
+ASE_DB_USER=root
+ASE_DB_PASS=
+ASE_SECRET_KEY=tu_clave_secreta_hmac</pre>
+    </div>
+</body>
+</html>

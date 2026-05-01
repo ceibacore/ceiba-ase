@@ -49,6 +49,23 @@ final class LemurSubscriptionRepository implements SubscriptionRepositoryInterfa
         return $row ? $this->mapToEntity($row) : null;
     }
 
+    public function findByClientAndStatus(string $clientId, string $status): array
+    {
+        $db = LemurInstance::get();
+        $rows = $db->query(TableNames::SUBSCRIPTIONS)
+            ->where([
+                'external_client_id' => $clientId,
+                'status' => $status
+            ])
+            ->get();
+            
+        $entities = [];
+        foreach ($rows as $row) {
+            $entities[] = $this->mapToEntity($row);
+        }
+        return $entities;
+    }
+
     private function mapToEntity(array $row): Subscription
     {
         return new Subscription(
