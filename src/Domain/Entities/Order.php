@@ -35,4 +35,5 @@ final class Order extends AggregateRoot
     public function markAsPaid(): void { $this->status = 'paid'; }
     public function markAsFailed(): void { $this->status = 'failed'; }
     public function markAsExpired(): void { $this->status = 'expired'; }
+    public function markAsRefunded(): void { $this->status = 'refunded'; }
 }

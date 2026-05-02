@@ -21,4 +21,19 @@ interface PaymentGatewayInterface
      * Process the webhook payload and return normalized transaction data.
      */
     public function parseWebhookEvent(array $payload): array;
+
+    /**
+     * Issue a refund against a transaction.
+     *
+     * @param string $externalTransactionId Charge/transaction ID from payment provider
+     * @param float  $amount                Amount to refund in the original currency
+     * @param string $reason                Human-readable reason for refund
+     *
+     * @return array [
+     *                  'status' => 'success'|'failed',
+     *                  'external_refund_id' => string|null,
+     *                  'error' => string|null
+     *               ]
+     */
+    public function refund(string $externalTransactionId, float $amount, string $reason): array;
 }

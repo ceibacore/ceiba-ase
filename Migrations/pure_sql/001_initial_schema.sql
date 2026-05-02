@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS ase_plans (
+CREATE TABLE IF NOT EXISTS prefix_plans (
     id CHAR(36) PRIMARY KEY,
     short_id CHAR(12) NOT NULL UNIQUE,
     slug VARCHAR(100) NOT NULL UNIQUE,
@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS ase_plans (
     INDEX idx_short_id (short_id)
 );
 
-CREATE TABLE IF NOT EXISTS ase_plan_prices (
+CREATE TABLE IF NOT EXISTS prefix_plan_prices (
     id CHAR(36) PRIMARY KEY,
     short_id CHAR(12) NOT NULL UNIQUE,
     plan_id CHAR(36) NOT NULL,
@@ -21,23 +21,23 @@ CREATE TABLE IF NOT EXISTS ase_plan_prices (
     interval_count INT DEFAULT 1,
     trial_days INT DEFAULT 0,
     is_active BOOLEAN DEFAULT 1,
-    FOREIGN KEY (plan_id) REFERENCES ase_plans(id) ON DELETE CASCADE,
+    FOREIGN KEY (plan_id) REFERENCES prefix_plans(id) ON DELETE CASCADE,
     INDEX idx_short_id (short_id)
 );
 
-CREATE TABLE IF NOT EXISTS ase_custom_prices (
+CREATE TABLE IF NOT EXISTS prefix_custom_prices (
     id CHAR(36) PRIMARY KEY,
     short_id CHAR(12) NOT NULL UNIQUE,
     plan_price_id CHAR(36) NOT NULL,
     external_client_id VARCHAR(255) NOT NULL,
     custom_amount DECIMAL(10,2) NOT NULL,
     valid_until DATETIME NULL,
-    FOREIGN KEY (plan_price_id) REFERENCES ase_plan_prices(id) ON DELETE CASCADE,
+    FOREIGN KEY (plan_price_id) REFERENCES prefix_plan_prices(id) ON DELETE CASCADE,
     INDEX idx_short_id (short_id),
     UNIQUE INDEX idx_client_plan (external_client_id, plan_price_id)
 );
 
-CREATE TABLE IF NOT EXISTS ase_gateways (
+CREATE TABLE IF NOT EXISTS prefix_gateways (
     id CHAR(36) PRIMARY KEY,
     short_id CHAR(12) NOT NULL UNIQUE,
     provider VARCHAR(50) NOT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS ase_gateways (
     INDEX idx_short_id (short_id)
 );
 
-CREATE TABLE IF NOT EXISTS ase_orders (
+CREATE TABLE IF NOT EXISTS prefix_orders (
     id CHAR(36) PRIMARY KEY,
     short_id CHAR(12) NOT NULL UNIQUE,
     external_client_id VARCHAR(255) NOT NULL,
@@ -61,14 +61,14 @@ CREATE TABLE IF NOT EXISTS ase_orders (
     external_order_id VARCHAR(255) NULL,
     created_at DATETIME DEFAULT CURRENT_DATETIME,
     updated_at DATETIME DEFAULT CURRENT_DATETIME ON UPDATE CURRENT_DATETIME,
-    FOREIGN KEY (plan_price_id) REFERENCES ase_plan_prices(id),
-    FOREIGN KEY (gateway_id) REFERENCES ase_gateways(id),
-    FOREIGN KEY (custom_price_id) REFERENCES ase_custom_prices(id),
+    FOREIGN KEY (plan_price_id) REFERENCES prefix_plan_prices(id),
+    FOREIGN KEY (gateway_id) REFERENCES prefix_gateways(id),
+    FOREIGN KEY (custom_price_id) REFERENCES prefix_custom_prices(id),
     INDEX idx_short_id (short_id),
     INDEX idx_client_status (external_client_id, status)
 );
 
-CREATE TABLE IF NOT EXISTS ase_subscriptions (
+CREATE TABLE IF NOT EXISTS prefix_subscriptions (
     id CHAR(36) PRIMARY KEY,
     short_id CHAR(12) NOT NULL UNIQUE,
     order_id CHAR(36) NOT NULL,
@@ -82,14 +82,14 @@ CREATE TABLE IF NOT EXISTS ase_subscriptions (
     canceled_at DATETIME NULL,
     created_at DATETIME DEFAULT CURRENT_DATETIME,
     updated_at DATETIME DEFAULT CURRENT_DATETIME ON UPDATE CURRENT_DATETIME,
-    FOREIGN KEY (order_id) REFERENCES ase_orders(id),
-    FOREIGN KEY (plan_price_id) REFERENCES ase_plan_prices(id),
-    FOREIGN KEY (gateway_id) REFERENCES ase_gateways(id),
+    FOREIGN KEY (order_id) REFERENCES prefix_orders(id),
+    FOREIGN KEY (plan_price_id) REFERENCES prefix_plan_prices(id),
+    FOREIGN KEY (gateway_id) REFERENCES prefix_gateways(id),
     INDEX idx_short_id (short_id),
     INDEX idx_client_status (external_client_id, status)
 );
 
-CREATE TABLE IF NOT EXISTS ase_invoices (
+CREATE TABLE IF NOT EXISTS prefix_invoices (
     id CHAR(36) PRIMARY KEY,
     short_id CHAR(12) NOT NULL UNIQUE,
     order_id CHAR(36) NOT NULL,
@@ -107,12 +107,12 @@ CREATE TABLE IF NOT EXISTS ase_invoices (
     due_at DATETIME NULL,
     paid_at DATETIME NULL,
     created_at DATETIME DEFAULT CURRENT_DATETIME,
-    FOREIGN KEY (order_id) REFERENCES ase_orders(id),
-    FOREIGN KEY (subscription_id) REFERENCES ase_subscriptions(id),
+    FOREIGN KEY (order_id) REFERENCES prefix_orders(id),
+    FOREIGN KEY (subscription_id) REFERENCES prefix_subscriptions(id),
     INDEX idx_short_id (short_id)
 );
 
-CREATE TABLE IF NOT EXISTS ase_transactions_log (
+CREATE TABLE IF NOT EXISTS prefix_transactions_log (
     id CHAR(36) PRIMARY KEY,
     short_id CHAR(12) NOT NULL UNIQUE,
     subscription_id CHAR(36) NULL,
@@ -126,9 +126,9 @@ CREATE TABLE IF NOT EXISTS ase_transactions_log (
     security_hash VARCHAR(255) NOT NULL,
     raw_payload JSON NULL,
     created_at DATETIME DEFAULT CURRENT_DATETIME,
-    FOREIGN KEY (subscription_id) REFERENCES ase_subscriptions(id),
-    FOREIGN KEY (order_id) REFERENCES ase_orders(id),
-    FOREIGN KEY (gateway_id) REFERENCES ase_gateways(id),
+    FOREIGN KEY (subscription_id) REFERENCES prefix_subscriptions(id),
+    FOREIGN KEY (order_id) REFERENCES prefix_orders(id),
+    FOREIGN KEY (gateway_id) REFERENCES prefix_gateways(id),
     INDEX idx_short_id (short_id),
     INDEX idx_client_status (external_client_id, status)
 );

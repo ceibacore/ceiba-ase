@@ -12,6 +12,36 @@ use LemurAse\Infrastructure\Persistence\TableNames;
 
 final class LemurPlanPriceRepository implements PlanPriceRepositoryInterface
 {
+    public function save(PlanPrice $planPrice): void
+    {
+        $db = LemurInstance::get();
+        $existing = $db->query(TableNames::PLAN_PRICES)
+            ->where(['id' => $planPrice->id()->uuid()])
+            ->first();
+
+        $data = [
+            'id'             => $planPrice->id()->uuid(),
+            'short_id'       => $planPrice->id()->short(),
+            'plan_id'        => $planPrice->planId()->uuid(),
+            'type'           => $planPrice->type(),
+            'amount'         => $planPrice->price()->amount(),
+            'currency'       => $planPrice->price()->currency()->toString(),
+            'interval'       => $planPrice->interval(),
+            'interval_count' => $planPrice->intervalCount(),
+            'trial_days'     => $planPrice->trialDays(),
+            'is_active'      => $planPrice->isActive() ? 1 : 0,
+        ];
+
+        if ($existing) {
+            unset($data['id'], $data['short_id']);   // do not overwrite PKs
+            $db->query(TableNames::PLAN_PRICES)
+                ->where(['id' => $planPrice->id()->uuid()])
+                ->update($data);
+        } else {
+            $db->query(TableNames::PLAN_PRICES)->insert($data);
+        }
+    }
+
     public function findById(EntityId $id): ?PlanPrice
     {
         $db = LemurInstance::get();

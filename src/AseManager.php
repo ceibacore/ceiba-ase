@@ -6,6 +6,10 @@ use LemurAse\Application\UseCases\CreateOrder;
 use LemurAse\Application\UseCases\ExpireStaleOrders;
 use LemurAse\Application\UseCases\PriceCalculator;
 use LemurAse\Application\UseCases\ProcessWebhook;
+use LemurAse\Application\UseCases\CreatePlan;
+use LemurAse\Application\UseCases\UpdatePlan;
+use LemurAse\Application\UseCases\CreatePlanPrice;
+use LemurAse\Application\UseCases\CreateGateway;
 use LemurAse\Domain\Services\SecurityService;
 use LemurAse\Infrastructure\Persistence\LemurOrderRepository;
 use LemurAse\Infrastructure\Persistence\LemurPlanPriceRepository;
@@ -13,10 +17,33 @@ use LemurAse\Infrastructure\Persistence\LemurCustomPriceRepository;
 use LemurAse\Infrastructure\Persistence\LemurSubscriptionRepository;
 use LemurAse\Infrastructure\Persistence\LemurInvoiceRepository;
 use LemurAse\Infrastructure\Persistence\LemurTransactionLogRepository;
+use LemurAse\Infrastructure\Persistence\LemurPlanRepository;
+use LemurAse\Infrastructure\Persistence\LemurGatewayRepository;
 use LemurAse\Infrastructure\Payments\StripeAdapter;
 use LemurAse\Infrastructure\Payments\PayPalAdapter;
+use LemurAse\Domain\Gateways\PaymentGatewayInterface;
 use LemurAse\Domain\ValueObjects\EntityId;
 
+/**
+ * Agnostic Subscription Engine — main facade.
+ *
+ * All public methods are static. Use AseManager::getInstance() for
+ * the underlying singleton, or call methods directly on the class.
+ *
+ * @method static string      createCheckoutSession(string $clientId, string $planPriceId, string $gatewayId)
+ * @method static int         expireStaleOrders()
+ * @method static bool        handleWebhook(string $gatewayProvider, array $payload, array $headers)
+ * @method static bool        processValidatedEvent(string $action, array $normalizedData)
+ * @method static array|null  getClientActiveSubscription(string $clientId)
+ * @method static array       getClientInvoices(string $clientId, int $limit = 10)
+ * @method static bool        hasActiveAccess(string $clientId, string $planSlug)
+ * @method static void        assignCustomPrice(string $clientId, string $planPriceId, float $amount, ?string $validUntil)
+ * @method static void        cancelSubscription(string $clientId, string $subscriptionId, bool $atPeriodEnd = true)
+ * @method static array       getEnabledGateways()
+ * @method static array       getAllGateways()
+ * @method static array|null  getGatewayById(string $gatewayId)
+ * @method static array|null  getGatewayByProvider(string $provider)
+ */
 final class AseManager
 {
     private static ?self $instance = null;
@@ -28,6 +55,8 @@ final class AseManager
     private LemurSubscriptionRepository $subscriptionRepo;
     private LemurInvoiceRepository $invoiceRepo;
     private LemurTransactionLogRepository $logRepo;
+    private LemurPlanRepository $planRepo;
+    private LemurGatewayRepository $gatewayRepo;
 
     // Services
     private SecurityService $securityService;
@@ -41,6 +70,8 @@ final class AseManager
         $this->subscriptionRepo = new LemurSubscriptionRepository();
         $this->invoiceRepo = new LemurInvoiceRepository();
         $this->logRepo = new LemurTransactionLogRepository();
+        $this->planRepo = new LemurPlanRepository();
+        $this->gatewayRepo = new LemurGatewayRepository();
 
         $this->securityService = new SecurityService();
         $this->priceCalculator = new PriceCalculator($this->customPriceRepo);
@@ -69,11 +100,8 @@ final class AseManager
 
         $order = $useCase->execute($clientId, $planPriceId, $gatewayId);
 
-        // Fetch the corresponding gateway adapter dynamically
-        // In a real implementation, you might fetch the gateway record from DB
-        // Here we simulate for Stripe/PayPal
-        $gatewayProvider = 'stripe'; // This would be fetched from DB via $gatewayId
-        $adapter = $manager->getGatewayAdapter($gatewayProvider);
+        // Fetch the corresponding gateway adapter with credentials from DB
+        $adapter = $manager->getGatewayAdapter($gatewayId);
         
         $session = $adapter->createCheckoutSession($order);
 
@@ -100,16 +128,36 @@ final class AseManager
 
     /**
      * Process an incoming webhook using the built-in adapter for validation.
+     * 
+     * SECURITY: Signature verification happens FIRST, before JSON parsing.
+     * The $rawBody is passed to the adapter via headers for secure verification.
+     *
+     * @param string $gatewayId UUID of the gateway record (from prefix_gateways.id)
+     * @param string $rawBody   The raw HTTP request body (for signature verification)
+     * @param array  $headers   The HTTP headers
+     *
+     * @return bool True if webhook was successfully processed
+     * @throws \RuntimeException If webhook signature validation fails
      */
-    public static function handleWebhook(string $gatewayProvider, array $payload, array $headers): bool
+    public static function handleWebhook(string $gatewayId, string $rawBody, array $headers): bool
     {
         $manager = self::getInstance();
-        $adapter = $manager->getGatewayAdapter($gatewayProvider);
+        $adapter = $manager->getGatewayAdapter($gatewayId);
 
-        if (!$adapter->validateWebhook($payload, $headers)) {
-            throw new \RuntimeException("Invalid webhook signature.");
+        // Parse JSON payload
+        $payload = json_decode($rawBody, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new \RuntimeException("Invalid JSON payload: " . json_last_error_msg());
         }
 
+        // CRITICAL: Validate webhook signature BEFORE processing
+        // Pass raw body through headers for signature verification
+        $headers['X-RAW-BODY'] = $rawBody;
+        if (!$adapter->validateWebhook($payload, $headers)) {
+            throw new \RuntimeException("Invalid webhook signature for gateway {$gatewayId}");
+        }
+
+        // Signature is valid; parse and process the event
         $eventData = $adapter->parseWebhookEvent($payload);
         return self::processValidatedEvent($eventData['action'] ?? 'UNKNOWN', $eventData);
     }
@@ -194,20 +242,22 @@ final class AseManager
                 'paid_at' => $inv->paidAt()?->format('Y-m-d H:i:s')
             ];
         }
-        
+
         return $result;
     }
 
     /**
      * Helper to verify if the client has active access considering the grace period.
+     * Clients in 'trialing' status also have access (trial period support).
      */
     public static function hasActiveAccess(string $clientId, string $planSlug): bool
     {
         $manager = self::getInstance();
-        
-        // Find active or past_due subscriptions
+
+        // Find active, trialing, or past_due subscriptions
         $subs = array_merge(
             $manager->subscriptionRepo->findByClientAndStatus($clientId, 'active'),
+            $manager->subscriptionRepo->findByClientAndStatus($clientId, 'trialing'),
             $manager->subscriptionRepo->findByClientAndStatus($clientId, 'past_due')
         );
 
@@ -220,6 +270,14 @@ final class AseManager
             // Assuming we check the end date + grace period
             $endDate = $sub->currentPeriodEnd();
             
+            // Trialing subscriptions always have access (trial is running)
+            if ($sub->status() === 'trialing') {
+                if ($endDate && $endDate > new \DateTimeImmutable()) {
+                    return true;
+                }
+                continue;
+            }
+
             if (!$endDate) {
                 if ($sub->status() === 'active') {
                     return true;
@@ -289,12 +347,286 @@ final class AseManager
             ]);
     }
 
-    private function getGatewayAdapter(string $provider)
+    /**
+     * Create a new subscription plan.
+     */
+    public static function createPlan(
+        string  $slug,
+        string  $name,
+        ?string $description = null,
+        bool    $isActive    = true
+    ): array {
+        $manager = self::getInstance();
+        $useCase = new CreatePlan($manager->planRepo);
+        $plan    = $useCase->execute($slug, $name, $description, $isActive);
+
+        return [
+            'id'          => $plan->id()->uuid(),
+            'slug'        => $plan->slug(),
+            'name'        => $plan->name(),
+            'description' => $plan->description(),
+            'is_active'   => $plan->isActive(),
+        ];
+    }
+
+    /**
+     * Update an existing plan.
+     */
+    public static function updatePlan(
+        string  $planId,
+        ?string $name        = null,
+        ?string $description = null,
+        ?bool   $isActive    = null
+    ): array {
+        $manager = self::getInstance();
+        $useCase = new UpdatePlan($manager->planRepo);
+        $plan    = $useCase->execute($planId, $name, $description, $isActive);
+
+        return [
+            'id'          => $plan->id()->uuid(),
+            'slug'        => $plan->slug(),
+            'name'        => $plan->name(),
+            'description' => $plan->description(),
+            'is_active'   => $plan->isActive(),
+        ];
+    }
+
+    /**
+     * Add a price to an existing plan.
+     */
+    public static function createPlanPrice(
+        string  $planId,
+        string  $type,
+        float   $amount,
+        string  $currency,
+        ?string $interval      = null,
+        int     $intervalCount = 1,
+        int     $trialDays     = 0
+    ): array {
+        $manager = self::getInstance();
+        $useCase = new CreatePlanPrice($manager->planRepo, $manager->planPriceRepo);
+        $price   = $useCase->execute($planId, $type, $amount, $currency, $interval, $intervalCount, $trialDays);
+
+        return [
+            'id'             => $price->id()->uuid(),
+            'plan_id'        => $price->planId()->uuid(),
+            'type'           => $price->type(),
+            'amount'         => $price->price()->amount(),
+            'currency'       => $price->price()->currency()->toString(),
+            'interval'       => $price->interval(),
+            'interval_count' => $price->intervalCount(),
+            'trial_days'     => $price->trialDays(),
+            'is_active'      => $price->isActive(),
+        ];
+    }
+
+    /**
+     * Register a payment gateway with its credentials.
+     */
+    public static function registerGateway(
+        string $provider,
+        array  $credentials,
+        bool   $isActive = true
+    ): array {
+        $manager = self::getInstance();
+        $useCase = new CreateGateway($manager->gatewayRepo);
+        $gateway = $useCase->execute($provider, $credentials, $isActive);
+
+        return [
+            'id'       => $gateway->id()->uuid(),
+            'provider' => $gateway->provider(),
+            'is_active' => $gateway->isActive(),
+            // credentials intentionally omitted from return value
+        ];
+    }
+
+    /**
+     * List all plans.
+     */
+    public static function listPlans(bool $onlyActive = false): array
     {
-        return match (strtolower($provider)) {
-            'stripe' => new StripeAdapter(),
-            'paypal' => new PayPalAdapter(),
-            default => throw new \InvalidArgumentException("Unsupported gateway provider: {$provider}")
+        $manager = self::getInstance();
+        $plans   = $manager->planRepo->findAll($onlyActive);
+
+        return array_map(fn($p) => [
+            'id'          => $p->id()->uuid(),
+            'slug'        => $p->slug(),
+            'name'        => $p->name(),
+            'description' => $p->description(),
+            'is_active'   => $p->isActive(),
+        ], $plans);
+    }
+
+    /**
+     * Get a single plan by UUID.
+     */
+    public static function getPlan(string $planId): ?array
+    {
+        $manager = self::getInstance();
+        $plan    = $manager->planRepo->findById(EntityId::fromString($planId));
+
+        if (!$plan) return null;
+
+        return [
+            'id'          => $plan->id()->uuid(),
+            'slug'        => $plan->slug(),
+            'name'        => $plan->name(),
+            'description' => $plan->description(),
+            'is_active'   => $plan->isActive(),
+        ];
+    }
+
+    /**
+     * Get all ENABLED payment gateways (providers like Stripe & PayPal that are active).
+     * 
+     * Developers use this to show available payment options.
+     * 
+     * @return array List of enabled gateways
+     *         Example: [
+     *             ['id' => 'uuid1', 'provider' => 'stripe'],
+     *             ['id' => 'uuid2', 'provider' => 'paypal']
+     *         ]
+     */
+    public static function getEnabledGateways(): array
+    {
+        $manager = self::getInstance();
+        $gateways = $manager->gatewayRepo->findAllEnabled();
+
+        return array_map(fn($g) => [
+            'id'       => $g->id()->uuid(),
+            'provider' => $g->provider(),
+        ], $gateways);
+    }
+
+    /**
+     * Get ALL gateways (enabled or disabled).
+     * 
+     * Useful for admin panels to manage gateway status.
+     * 
+     * @return array List of all gateways with status
+     *         Example: [
+     *             ['id' => 'uuid1', 'provider' => 'stripe', 'is_active' => true],
+     *             ['id' => 'uuid2', 'provider' => 'paypal', 'is_active' => false]
+     *         ]
+     */
+    public static function getAllGateways(): array
+    {
+        $manager = self::getInstance();
+        $gateways = $manager->gatewayRepo->findAll();
+
+        return array_map(fn($g) => [
+            'id'        => $g->id()->uuid(),
+            'provider'  => $g->provider(),
+            'is_active' => $g->isActive(),
+        ], $gateways);
+    }
+
+    /**
+     * Get a single gateway by ID.
+     * 
+     * @param string $gatewayId UUID of the gateway
+     * @return array|null Gateway data or null if not found
+     *         Example: ['id' => 'uuid1', 'provider' => 'stripe', 'is_active' => true]
+     */
+    public static function getGatewayById(string $gatewayId): ?array
+    {
+        $manager = self::getInstance();
+        $gateway = $manager->gatewayRepo->findById(EntityId::fromString($gatewayId));
+
+        if (!$gateway) {
+            return null;
+        }
+
+        return [
+            'id'        => $gateway->id()->uuid(),
+            'provider'  => $gateway->provider(),
+            'is_active' => $gateway->isActive(),
+        ];
+    }
+
+    /**
+     * Get the first ENABLED gateway for a given provider.
+     * 
+     * Convenience method for developers who only care about provider type.
+     * Example: Get "the" Stripe gateway, or "the" PayPal gateway.
+     * 
+     * @param string $provider 'stripe' or 'paypal'
+     * @return array|null Gateway data or null if no enabled gateway exists
+     *         Example: ['id' => 'uuid1', 'provider' => 'stripe']
+     */
+    public static function getGatewayByProvider(string $provider): ?array
+    {
+        $manager = self::getInstance();
+        $gateways = $manager->gatewayRepo->findAllEnabled();
+
+        foreach ($gateways as $gateway) {
+            if ($gateway->provider() === $provider) {
+                return [
+                    'id'       => $gateway->id()->uuid(),
+                    'provider' => $gateway->provider(),
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * MULTI-GATEWAY USAGE EXAMPLE
+     * 
+     * 1. Developer lists enabled gateways:
+     *    $gateways = AseManager::getEnabledGateways();
+     *    // Returns: [['id' => 'gw1', 'provider' => 'stripe'], ['id' => 'gw2', 'provider' => 'paypal']]
+     * 
+     * 2. Developer passes to frontend (e.g., as JSON options):
+     *    return response()->json($gateways);
+     * 
+     * 3. Frontend shows radio buttons: "Pay with Stripe" vs "Pay with PayPal"
+     * 
+     * 4. User selects gateway and frontend sends back gatewayId
+     * 
+     * 5. Developer creates checkout with selected gateway:
+     *    $checkoutUrl = AseManager::createCheckoutSession($clientId, $planPriceId, $selectedGatewayId);
+     * 
+     * 6. Developer redirects user to $checkoutUrl
+     */
+
+    private function getGatewayAdapter(string $gatewayId): PaymentGatewayInterface
+    {
+        $gateway = $this->gatewayRepo->findById(EntityId::fromString($gatewayId));
+
+        if (!$gateway) {
+            throw new \RuntimeException("Gateway '{$gatewayId}' not found in database.");
+        }
+
+        if (!$gateway->isActive()) {
+            throw new \RuntimeException("Gateway '{$gatewayId}' is not active.");
+        }
+
+        return match ($gateway->provider()) {
+            'stripe' => $this->buildStripeAdapter($gateway->credentials()),
+            'paypal' => $this->buildPayPalAdapter($gateway->credentials()),
+            default  => throw new \RuntimeException("Unsupported gateway provider: {$gateway->provider()}")
         };
+    }
+
+    private function buildStripeAdapter(array $credentials): StripeAdapter
+    {
+        $publishableKey = $credentials['publishable_key'] ?? throw new \RuntimeException("Stripe credential 'publishable_key' missing.");
+        $secretKey     = $credentials['secret_key']     ?? throw new \RuntimeException("Stripe credential 'secret_key' missing.");
+        $webhookSecret = $credentials['webhook_secret'] ?? throw new \RuntimeException("Stripe credential 'webhook_secret' missing.");
+        $testMode      = (bool) ($credentials['test_mode'] ?? false);
+
+        return new StripeAdapter($publishableKey, $secretKey, $webhookSecret, $testMode);
+    }
+
+    private function buildPayPalAdapter(array $credentials): PayPalAdapter
+    {
+        $clientId     = $credentials['client_id']     ?? throw new \RuntimeException("PayPal credential 'client_id' missing.");
+        $clientSecret = $credentials['client_secret'] ?? throw new \RuntimeException("PayPal credential 'client_secret' missing.");
+        $webhookId    = $credentials['webhook_id']    ?? throw new \RuntimeException("PayPal credential 'webhook_id' missing.");
+        $sandbox      = (bool) ($credentials['sandbox'] ?? false);
+
+        return new PayPalAdapter($clientId, $clientSecret, $webhookId, $sandbox);
     }
 }

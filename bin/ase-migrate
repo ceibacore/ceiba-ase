@@ -1,0 +1,273 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// ── Bootstrap ────────────────────────────────────────────────────────────────
+
+$autoloaderPaths = [
+    __DIR__ . '/../vendor/autoload.php',
+    __DIR__ . '/../../autoload.php',
+    __DIR__ . '/../../../autoload.php',
+];
+
+$autoloaderFound = false;
+foreach ($autoloaderPaths as $path) {
+    if (file_exists($path)) {
+        require_once $path;
+        $autoloaderFound = true;
+        break;
+    }
+}
+
+if (!$autoloaderFound) {
+    fwrite(STDERR, "[ASE] Error: vendor/autoload.php not found. Run 'composer install'.\n");
+    exit(1);
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function ase_color(string $text, string $color): string
+{
+    $colors = [
+        'green'  => "\033[0;32m",
+        'red'    => "\033[0;31m",
+        'yellow' => "\033[0;33m",
+        'cyan'   => "\033[0;36m",
+        'bold'   => "\033[1m",
+        'reset'  => "\033[0m",
+    ];
+    return ($colors[$color] ?? '') . $text . $colors['reset'];
+}
+
+function ase_print_table(array $rows, array $headers): void
+{
+    if (empty($rows)) {
+        echo "  (no results)\n";
+        return;
+    }
+    $widths = array_map('strlen', $headers);
+    foreach ($rows as $row) {
+        foreach (array_values($row) as $i => $val) {
+            $widths[$i] = max($widths[$i] ?? 0, strlen((string) $val));
+        }
+    }
+    $separator = '+' . implode('+', array_map(fn($w) => str_repeat('-', $w + 2), $widths)) . '+';
+    echo $separator . "\n";
+    $header = '|';
+    foreach ($headers as $i => $h) {
+        $header .= ' ' . str_pad($h, $widths[$i]) . ' |';
+    }
+    echo $header . "\n";
+    echo $separator . "\n";
+    foreach ($rows as $row) {
+        $line = '|';
+        foreach (array_values($row) as $i => $val) {
+            $line .= ' ' . str_pad((string) $val, $widths[$i]) . ' |';
+        }
+        echo $line . "\n";
+    }
+    echo $separator . "\n";
+}
+
+// ── Argument Parsing ─────────────────────────────────────────────────────────
+
+$longopts = ['steps:', 'dry-run', 'confirm', 'path:', 'help'];
+$optind   = 0;
+$opts     = getopt('h', $longopts, $optind);
+$args     = array_slice($argv, $optind);
+$command  = $args[0] ?? null;
+
+$steps   = isset($opts['steps'])   ? (int) $opts['steps']   : null;
+$dryRun  = isset($opts['dry-run']);
+$confirm = isset($opts['confirm']);
+$migrationsPath = $opts['path'] ?? (__DIR__ . '/../migrations/php');
+
+// ── Help ─────────────────────────────────────────────────────────────────────
+
+if ($command === null || isset($opts['h']) || isset($opts['help'])) {
+    echo ase_color("ASE Migration CLI\n", 'bold');
+    echo "\nUSAGE\n";
+    echo "  php bin/ase-migrate <command> [options]\n\n";
+    echo "COMMANDS\n";
+    echo "  migrate              Run all pending migrations\n";
+    echo "  migrate --steps=N    Run only the next N pending migrations\n";
+    echo "  migrate --dry-run    Print SQL without executing\n";
+    echo "  rollback             Revert the last applied migration\n";
+    echo "  rollback --steps=N   Revert the last N applied migrations\n";
+    echo "  rollback --dry-run   Print rollback SQL without executing\n";
+    echo "  status               List all migrations with applied/pending status\n";
+    echo "  fresh --confirm      Drop all tables and re-run all migrations\n";
+    echo "  make <description>   Scaffold a new migration file\n\n";
+    echo "ENVIRONMENT VARIABLES\n";
+    echo "  ASE_DB_DRIVER, ASE_DB_HOST, ASE_DB_PORT, ASE_DB_NAME,\n";
+    echo "  ASE_DB_USER, ASE_DB_PASS, ASE_DB_PREFIX\n\n";
+    echo "OPTIONS\n";
+    echo "  --path=<dir>         Override migrations directory\n";
+    echo "  --steps=N            Number of migrations to run or roll back\n";
+    echo "  --dry-run            Preview SQL without executing\n";
+    echo "  --confirm            Required for destructive commands (fresh)\n";
+    exit(0);
+}
+
+// ── make command (no DB needed) ───────────────────────────────────────────────
+
+if ($command === 'make') {
+    $description = $args[1] ?? null;
+    if (!$description) {
+        fwrite(STDERR, ase_color("[ERROR] Usage: ase-migrate make <description_in_snake_case>\n", 'red'));
+        exit(1);
+    }
+
+    $description = strtolower(preg_replace('/\s+/', '_', trim($description)));
+    $version     = date('YmdHis');
+    $className   = implode('', array_map('ucfirst', explode('_', $description)));
+    $filename    = "{$version}_{$description}.php";
+    $fullClass   = "Migration_{$version}_{$className}";
+
+    $stubPath = __DIR__ . '/../src/Migration/Stub/migration.stub';
+    if (!file_exists($stubPath)) {
+        fwrite(STDERR, ase_color("[ERROR] Stub file not found: {$stubPath}\n", 'red'));
+        exit(1);
+    }
+
+    $stub = file_get_contents($stubPath);
+    $stub = str_replace(
+        ['{{VERSION}}', '{{CLASSNAME}}', '{{DESCRIPTION}}'],
+        [$version,      $className,      $description],
+        $stub
+    );
+
+    if (!is_dir($migrationsPath)) {
+        mkdir($migrationsPath, 0755, true);
+    }
+
+    $outputPath = rtrim($migrationsPath, '/\\') . '/' . $filename;
+    file_put_contents($outputPath, $stub);
+
+    echo ase_color("[OK] ", 'green') . "Created migration: {$outputPath}\n";
+    echo "     Class: {$fullClass}\n";
+    exit(0);
+}
+
+// ── Bootstrap DB for other commands ──────────────────────────────────────────
+
+try {
+    \LemurAse\Shared\EnvironmentGuard::check();
+} catch (\RuntimeException $e) {
+    fwrite(STDERR, ase_color("[ERROR] " . $e->getMessage() . "\n", 'red'));
+    fwrite(STDERR, "Set the required environment variables before running migrations.\n");
+    exit(1);
+}
+
+$db  = \LemurAse\Shared\LemurInstance::get();
+$pdo = $db->pdo();
+
+$runner = new \LemurAse\Migration\AseMigrationRunner(
+    pdo:            $pdo,
+    migrationsPath: $migrationsPath,
+    prefix:         (string) (\LemurAse\Shared\EnvironmentGuard::get('ASE_DB_PREFIX', 'ase_')),
+    dryRun:         $dryRun
+);
+
+// ── Dispatch ─────────────────────────────────────────────────────────────────
+
+switch ($command) {
+    case 'migrate':
+        echo ase_color("Running migrations...\n", 'cyan');
+        $result = $runner->migrate($steps);
+        if (empty($result->applied) && empty($result->sqlLog)) {
+            echo ase_color("Nothing to migrate. All up to date.\n", 'green');
+            break;
+        }
+        if ($dryRun) {
+            echo ase_color("[DRY-RUN] SQL that would be executed:\n", 'yellow');
+            foreach ($result->sqlLog as $sql) {
+                echo "  " . $sql . "\n";
+            }
+        } else {
+            foreach ($result->applied as $version) {
+                echo ase_color("  ✓ Applied: ", 'green') . $version . "\n";
+            }
+        }
+        if (!empty($result->errors)) {
+            foreach ($result->errors as $err) {
+                fwrite(STDERR, ase_color("  ✗ Failed [{$err['version']}]: {$err['message']}\n", 'red'));
+            }
+            exit(1);
+        }
+        break;
+
+    case 'rollback':
+        $rollbackSteps = $steps ?? 1;
+        echo ase_color("Rolling back {$rollbackSteps} migration(s)...\n", 'yellow');
+        $result = $runner->rollback($rollbackSteps);
+        if (empty($result->reverted) && empty($result->sqlLog)) {
+            echo "Nothing to roll back.\n";
+            break;
+        }
+        if ($dryRun) {
+            echo ase_color("[DRY-RUN] SQL that would be executed:\n", 'yellow');
+            foreach ($result->sqlLog as $sql) {
+                echo "  " . $sql . "\n";
+            }
+        } else {
+            foreach ($result->reverted as $version) {
+                echo ase_color("  ↩ Reverted: ", 'yellow') . $version . "\n";
+            }
+        }
+        if (!empty($result->errors)) {
+            foreach ($result->errors as $err) {
+                fwrite(STDERR, ase_color("  ✗ Failed [{$err['version']}]: {$err['message']}\n", 'red'));
+            }
+            exit(1);
+        }
+        break;
+
+    case 'status':
+        $rows = $runner->status();
+        if (empty($rows)) {
+            echo "No migrations found in: {$migrationsPath}\n";
+            break;
+        }
+        echo ase_color("Migration Status\n", 'bold');
+        $tableRows = array_map(fn($r) => [
+            'Version'    => $r['version'],
+            'Name'       => $r['name'],
+            'Status'     => $r['status'] === 'applied'
+                              ? ase_color('Applied', 'green')
+                              : ase_color('Pending', 'yellow'),
+            'Applied At' => $r['applied_at'] ?? '—',
+            'Checksum'   => isset($r['checksum_match'])
+                              ? ($r['checksum_match'] ? ase_color('✓', 'green') : ase_color('CHANGED', 'red'))
+                              : '—',
+        ], $rows);
+        ase_print_table($tableRows, ['Version', 'Name', 'Status', 'Applied At', 'Checksum']);
+        break;
+
+    case 'fresh':
+        if (!$confirm) {
+            fwrite(STDERR, ase_color("[ERROR] 'fresh' is destructive. Add --confirm to proceed.\n", 'red'));
+            exit(1);
+        }
+        echo ase_color("Dropping all tables and re-running all migrations...\n", 'red');
+        $result = $runner->fresh(true);
+        foreach ($result->applied as $version) {
+            echo ase_color("  ✓ Applied: ", 'green') . $version . "\n";
+        }
+        if (!empty($result->errors)) {
+            foreach ($result->errors as $err) {
+                fwrite(STDERR, ase_color("  ✗ Failed [{$err['version']}]: {$err['message']}\n", 'red'));
+            }
+            exit(1);
+        }
+        echo ase_color("Done.\n", 'green');
+        break;
+
+    default:
+        fwrite(STDERR, ase_color("[ERROR] Unknown command: {$command}\n", 'red'));
+        fwrite(STDERR, "Run 'php bin/ase-migrate --help' for usage.\n");
+        exit(1);
+}
+
+exit(0);
