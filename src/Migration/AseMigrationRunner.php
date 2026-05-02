@@ -26,7 +26,8 @@ final class AseMigrationRunner
         private readonly string            $migrationsPath,
         private readonly string            $prefix         = '',
         private readonly bool              $dryRun         = false,
-        private readonly AseDialectInterface $dialect      = new MySQLDialect()
+        private readonly AseDialectInterface $dialect      = new MySQLDialect(),
+        private readonly bool              $debug          = false
     ) {}
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -40,11 +41,29 @@ final class AseMigrationRunner
 
         $discovered = $this->discoverMigrations();
         $applied    = $this->getAppliedVersions();
+        
+        if ($this->debug) {
+            echo "[DEBUG] Discovered migrations: " . count($discovered) . "\n";
+            echo "[DEBUG] Already applied: " . count($applied) . "\n";
+        }
+
         $pending    = array_filter($discovered, fn($m) => !isset($applied[$m['version']]));
         $pending    = array_values($pending);
 
+        if ($this->debug) {
+            echo "[DEBUG] Pending migrations: " . count($pending) . "\n";
+            foreach ($pending as $p) {
+                echo "  - {$p['version']} ({$p['name']})\n";
+            }
+        }
+
         if ($steps !== null) {
             $pending = array_slice($pending, 0, $steps);
+        }
+
+        if (empty($pending)) {
+            if ($this->debug) echo "[DEBUG] Nothing to migrate\n";
+            return new MigrationResult(success: true, applied: [], reverted: [], sqlLog: [], errors: []);
         }
 
         $appliedVersions = [];
@@ -53,6 +72,8 @@ final class AseMigrationRunner
 
         foreach ($pending as $meta) {
             try {
+                if ($this->debug) echo "[DEBUG] Executing migration {$meta['version']}...\n";
+                
                 $migration = $this->loadMigration($meta);
                 $builder   = new AseSchemaBuilder($this->pdo, $this->prefix, $this->dryRun, $this->dialect);
 
@@ -61,12 +82,19 @@ final class AseMigrationRunner
 
                 if ($this->dryRun) {
                     $sqlLog = array_merge($sqlLog, $builder->getSqlLog());
+                    if ($this->debug) echo "[DEBUG DRY-RUN] {$meta['version']} would be applied\n";
                 } else {
                     $this->recordApplied($meta['version'], $meta['name'], $this->computeChecksum($meta['file']));
+                    if ($this->debug) echo "[DEBUG] ✓ {$meta['version']} applied successfully\n";
                 }
 
                 $appliedVersions[] = $meta['version'];
             } catch (\Throwable $e) {
+                if ($this->debug) {
+                    echo "[DEBUG ERROR] {$meta['version']} failed:\n";
+                    echo "[DEBUG ERROR] " . $e->getMessage() . "\n";
+                    echo "[DEBUG ERROR] Previous code: " . $e->getCode() . "\n";
+                }
                 $errors[] = ['version' => $meta['version'], 'message' => $e->getMessage()];
                 break; // Stop on first error
             }

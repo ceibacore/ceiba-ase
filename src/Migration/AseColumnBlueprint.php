@@ -17,6 +17,10 @@ final class AseColumnBlueprint
     /** @var array[] Each: ['type'=>'index'|'unique'|'fk', 'columns'=>[], 'name'=>'', 'refTable'=>'', 'refColumn'=>'', 'onDelete'=>''] */
     private array $indexes = [];
 
+    public function __construct(private readonly string $tableName = '')
+    {
+    }
+
     // ── Shorthand column types ────────────────────────────────────────────────
 
     public function char(string $name, int $length = 36): AseColumnDef
@@ -100,12 +104,17 @@ final class AseColumnBlueprint
         $this->indexes[] = ['type' => 'unique', 'columns' => $cols, 'name' => $name];
     }
 
-    public function foreignKey(string $col, string $refTable, string $refColumn = 'id', string $onDelete = 'CASCADE'): void
+    public function foreignKey(string $col, string $refTable, string $refColumn = 'id', string $onDelete = 'CASCADE', string $name = ''): void
     {
+        if ($name) {
+            $constraintName = $name;
+        } else {
+            $constraintName = $this->tableName ? "fk_{$this->tableName}_{$col}" : "fk_{$col}";
+        }
         $this->indexes[] = [
             'type'      => 'fk',
             'columns'   => [$col],
-            'name'      => "fk_{$col}",
+            'name'      => $constraintName,
             'refTable'  => $refTable,
             'refColumn' => $refColumn,
             'onDelete'  => $onDelete,

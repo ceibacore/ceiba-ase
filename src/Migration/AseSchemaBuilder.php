@@ -20,14 +20,15 @@ final class AseSchemaBuilder
         private readonly \PDO              $pdo,
         private readonly string            $prefix  = '',
         private readonly bool              $dryRun  = false,
-        private readonly AseDialectInterface $dialect = new MySQLDialect()
+        private readonly AseDialectInterface $dialect = new MySQLDialect(),
+        private readonly bool              $debug = false
     ) {}
 
     // ── Table-level ──────────────────────────────────────────────────────────
 
     public function createTable(string $table, callable $definition): void
     {
-        $blueprint = new AseColumnBlueprint();
+        $blueprint = new AseColumnBlueprint($table);
         $definition($blueprint);
         $sql = $blueprint->toCreateSql($this->prefix($table), $this->dialect, $this->prefix);
         $this->execute($sql);
@@ -138,10 +139,18 @@ final class AseSchemaBuilder
             try {
                 $this->pdo->exec($sql);
             } catch (\PDOException $e) {
+                // Extract detailed error info from PDO
+                $errorInfo = $this->pdo->errorInfo();
+                $sqlState = $errorInfo[0] ?? 'HY000';
+                $errno = $errorInfo[1] ?? $e->getCode();
+                $errMsg = $errorInfo[2] ?? $e->getMessage();
+                
+                $details = "MySQL errno {$errno} [SQLSTATE: {$sqlState}]";
                 throw new \RuntimeException(
-                    "Migration SQL error: " . $e->getMessage() . "\n" .
+                    "Migration SQL error: {$details}\n" .
+                    "Message: {$errMsg}\n" .
                     "SQL: " . $sql,
-                    (int)$e->getCode(),
+                    (int)$errno,
                     $e
                 );
             }
