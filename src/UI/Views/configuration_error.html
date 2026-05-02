@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,6 +16,7 @@
             height: 100vh;
             margin: 0;
         }
+
         .container {
             background: #1f2937;
             padding: 40px;
@@ -23,6 +25,7 @@
             max-width: 500px;
             text-align: left;
         }
+
         .badge {
             background: #ef4444;
             color: white;
@@ -35,17 +38,20 @@
             margin-bottom: 20px;
             display: inline-block;
         }
+
         h1 {
             font-size: 24px;
             margin-top: 0;
             margin-bottom: 15px;
             color: #f9fafb;
         }
+
         p {
             color: #9ca3af;
             line-height: 1.6;
             margin-bottom: 20px;
         }
+
         pre {
             background: #000;
             padding: 15px;
@@ -56,21 +62,24 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <span class="badge">Agnostic Subscription Engine</span>
         <h1>Error de Configuración</h1>
-        <p>El módulo ASE no ha sido configurado correctamente en el entorno anfitrión. Faltan variables de entorno requeridas para la conexión a la base de datos o claves de seguridad.</p>
-        
+        <p>El módulo ASE no ha sido configurado correctamente en el entorno anfitrión. Faltan variables de entorno
+            requeridas para la conexión a la base de datos o claves de seguridad.</p>
+
         <p>Por favor, asegúrate de definir las siguientes variables en tu archivo <code>.env</code>:</p>
-        
+
         <pre>
-ASE_DB_HOST=localhost
-ASE_DB_PORT=3306
-ASE_DB_NAME=tu_base_de_datos
-ASE_DB_USER=root
-ASE_DB_PASS=
+DB_HOST=localhost
+DB_PORT=3306
+DB_DATABASE=tu_base_de_datos
+DB_USERNAME=root
+DB_PASSWORD=
 ASE_SECRET_KEY=tu_clave_secreta_hmac</pre>
     </div>
 </body>
+
 </html>

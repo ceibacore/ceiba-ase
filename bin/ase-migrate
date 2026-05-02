@@ -100,8 +100,8 @@ if ($command === null || isset($opts['h']) || isset($opts['help'])) {
     echo "  fresh --confirm      Drop all tables and re-run all migrations\n";
     echo "  make <description>   Scaffold a new migration file\n\n";
     echo "ENVIRONMENT VARIABLES\n";
-    echo "  ASE_DB_DRIVER, ASE_DB_HOST, ASE_DB_PORT, ASE_DB_NAME,\n";
-    echo "  ASE_DB_USER, ASE_DB_PASS, ASE_DB_PREFIX\n\n";
+    echo "  ASE_DB_DRIVER, DB_HOST, DB_PORT, DB_DATABASE,\n";
+    echo "  DB_USERNAME, DB_PASSWORD, DB_PREFIX\n\n";
     echo "OPTIONS\n";
     echo "  --path=<dir>         Override migrations directory\n";
     echo "  --steps=N            Number of migrations to run or roll back\n";
@@ -166,7 +166,7 @@ $pdo = $db->pdo();
 $runner = new \LemurAse\Migration\AseMigrationRunner(
     pdo:            $pdo,
     migrationsPath: $migrationsPath,
-    prefix:         (string) (\LemurAse\Shared\EnvironmentGuard::get('ASE_DB_PREFIX', 'ase_')),
+    prefix:         (string) (\LemurAse\Shared\EnvironmentGuard::get('DB_PREFIX', 'ase_')),
     dryRun:         $dryRun
 );
 

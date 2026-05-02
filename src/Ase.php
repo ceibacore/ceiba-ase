@@ -10,12 +10,12 @@ namespace LemurAse;
  *
  * Usage:
  *   \LemurAse\Ase::boot([
- *       'ASE_DB_HOST'   => '127.0.0.1',
- *       'ASE_DB_PORT'   => '3306',
- *       'ASE_DB_NAME'   => 'my_database',
- *       'ASE_DB_USER'   => 'db_user',
- *       'ASE_DB_PASS'   => 'secret',
- *       'ASE_DB_PREFIX' => 'ase_',
+ *       'DB_HOST'   => '127.0.0.1',
+ *       'DB_PORT'   => '3306',
+ *       'DB_DATABASE'   => 'my_database',
+ *       'DB_USERNAME'   => 'db_user',
+ *       'DB_PASSWORD'   => 'secret',
+ *       'DB_PREFIX' => 'ase_',
  *       'ASE_SECRET_KEY'=> 'signing_secret',
  *   ]);
  */

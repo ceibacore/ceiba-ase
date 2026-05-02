@@ -5,11 +5,11 @@ namespace LemurAse\Shared;
 class EnvironmentGuard
 {
     private static array $requiredVars = [
-        'ASE_DB_HOST',
-        'ASE_DB_PORT',
-        'ASE_DB_NAME',
-        'ASE_DB_USER',
-        'ASE_DB_PASS',
+        'DB_HOST',
+        'DB_PORT',
+        'DB_DATABASE',
+        'DB_USERNAME',
+        'DB_PASSWORD',
         'ASE_SECRET_KEY'
     ];
 

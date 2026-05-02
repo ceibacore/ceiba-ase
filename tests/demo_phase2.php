@@ -17,11 +17,11 @@ use LemurAse\Infrastructure\Persistence\LemurCustomPriceRepository;
 use LemurAse\Shared\LemurInstance;
 
 // Mock Environment Variables
-$_ENV['ASE_DB_HOST'] = 'localhost';
-$_ENV['ASE_DB_PORT'] = '3306';
-$_ENV['ASE_DB_NAME'] = 'lemur_test';
-$_ENV['ASE_DB_USER'] = 'root';
-$_ENV['ASE_DB_PASS'] = '';
+$_ENV['DB_HOST'] = 'localhost';
+$_ENV['DB_PORT'] = '3306';
+$_ENV['DB_DATABASE'] = 'lemur_test';
+$_ENV['DB_USERNAME'] = 'root';
+$_ENV['DB_PASSWORD'] = '';
 $_ENV['ASE_SECRET_KEY'] = 'secret_key_123';
 
 echo "--- Agnostic Subscription Engine (ASE) Phase 2 Demo ---\n";

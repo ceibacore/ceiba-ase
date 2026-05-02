@@ -14,12 +14,12 @@ class LemurInstance
 
         return LemurDB::getInstance([
             'driver'   => self::getEnv('ASE_DB_DRIVER', 'mysql'),
-            'host'     => self::getEnv('ASE_DB_HOST'),
-            'port'     => self::getEnv('ASE_DB_PORT', 3306),
-            'db'       => self::getEnv('ASE_DB_NAME'),
-            'username' => self::getEnv('ASE_DB_USER'),
-            'password' => self::getEnv('ASE_DB_PASS'),
-            'prefix'   => self::getEnv('ASE_DB_PREFIX', 'ase_'),
+            'host'     => self::getEnv('DB_HOST'),
+            'port'     => self::getEnv('DB_PORT', 3306),
+            'db'       => self::getEnv('DB_DATABASE'),
+            'username' => self::getEnv('DB_USERNAME'),
+            'password' => self::getEnv('DB_PASSWORD'),
+            'prefix'   => self::getEnv('DB_PREFIX', 'ase_'),
         ]);
     }
 
