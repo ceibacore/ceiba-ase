@@ -66,6 +66,16 @@ final class LemurSubscriptionRepository implements SubscriptionRepositoryInterfa
         return $entities;
     }
 
+    public function findByOrderId(EntityId $orderId): ?Subscription
+    {
+        $db = LemurInstance::get();
+        $row = $db->query(TableNames::SUBSCRIPTIONS)
+            ->where(["order_id" => $orderId->uuid()])
+            ->first();
+
+        return $row ? $this->mapToEntity($row) : null;
+    }
+
     private function mapToEntity(array $row): Subscription
     {
         return new Subscription(

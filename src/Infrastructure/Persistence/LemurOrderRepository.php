@@ -59,6 +59,16 @@ final class LemurOrderRepository implements OrderRepositoryInterface
         return array_map([$this, 'mapToEntity'], $rows);
     }
 
+    public function findByExternalTransactionId(string $externalTxId): ?Order
+    {
+        $db = LemurInstance::get();
+        $row = $db->query(TableNames::ORDERS)
+            ->where(["external_order_id" => $externalTxId])
+            ->first();
+
+        return $row ? $this->mapToEntity($row) : null;
+    }
+
     private function mapToEntity(array $row): Order
     {
         return new Order(

@@ -11,6 +11,7 @@ use LemurAse\Application\UseCases\UpdatePlan;
 use LemurAse\Application\UseCases\CreatePlanPrice;
 use LemurAse\Application\UseCases\CreateGateway;
 use LemurAse\Domain\Services\SecurityService;
+use LemurAse\Shared\EnvironmentGuard;
 use LemurAse\Infrastructure\Persistence\LemurOrderRepository;
 use LemurAse\Infrastructure\Persistence\LemurPlanPriceRepository;
 use LemurAse\Infrastructure\Persistence\LemurCustomPriceRepository;
@@ -64,6 +65,7 @@ final class AseManager
 
     private function __construct()
     {
+        EnvironmentGuard::check();
         $this->orderRepo = new LemurOrderRepository();
         $this->planPriceRepo = new LemurPlanPriceRepository();
         $this->customPriceRepo = new LemurCustomPriceRepository();
