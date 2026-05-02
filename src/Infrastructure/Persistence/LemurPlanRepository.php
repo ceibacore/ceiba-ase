@@ -23,6 +23,7 @@ final class LemurPlanRepository implements PlanRepositoryInterface
             'name'        => $plan->name(),
             'description' => $plan->description(),
             'is_active'   => $plan->isActive() ? 1 : 0,
+            'metadata'    => $plan->metadata() ? json_encode($plan->metadata()) : null,
         ];
 
         if ($existing) {
@@ -74,12 +75,20 @@ final class LemurPlanRepository implements PlanRepositoryInterface
 
     private function hydrate(array $row): Plan
     {
+        // Decode JSON metadata if present
+        $metadata = null;
+        if (!empty($row['metadata'])) {
+            $decoded = json_decode($row['metadata'], true);
+            $metadata = is_array($decoded) ? $decoded : null;
+        }
+
         return new Plan(
             EntityId::fromString($row['id']),
             $row['slug'],
             $row['name'],
             $row['description'] ?? null,
-            (bool) $row['is_active']
+            (bool) $row['is_active'],
+            $metadata
         );
     }
 }

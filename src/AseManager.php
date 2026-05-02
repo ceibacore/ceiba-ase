@@ -350,15 +350,19 @@ final class AseManager
     /**
      * Create a new subscription plan.
      */
+    /**
+     * Create a new subscription plan.
+     */
     public static function createPlan(
         string  $slug,
         string  $name,
         ?string $description = null,
-        bool    $isActive    = true
+        bool    $isActive    = true,
+        ?array  $metadata    = null
     ): array {
         $manager = self::getInstance();
         $useCase = new CreatePlan($manager->planRepo);
-        $plan    = $useCase->execute($slug, $name, $description, $isActive);
+        $plan    = $useCase->execute($slug, $name, $description, $isActive, $metadata);
 
         return [
             'id'          => $plan->id()->uuid(),
@@ -366,6 +370,7 @@ final class AseManager
             'name'        => $plan->name(),
             'description' => $plan->description(),
             'is_active'   => $plan->isActive(),
+            'metadata'    => $plan->metadata(),
         ];
     }
 

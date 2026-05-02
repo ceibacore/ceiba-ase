@@ -17,6 +17,8 @@ final class CreatePlan
      * @param  string      $name        Human-readable name (e.g. 'Pro Monthly')
      * @param  string|null $description Optional description
      * @param  bool        $isActive    Whether the plan is immediately available
+     * @param  array|null  $metadata    Custom flexible attributes (JSON)
+     *                                  E.g.: ['is_recommended' => true, 'max_users' => 100, 'features' => [...]]
      * @return Plan                     The newly persisted plan
      * @throws \InvalidArgumentException If slug is already taken
      */
@@ -24,7 +26,8 @@ final class CreatePlan
         string  $slug,
         string  $name,
         ?string $description = null,
-        bool    $isActive    = true
+        bool    $isActive    = true,
+        ?array  $metadata    = null
     ): Plan {
         if ($this->planRepo->existsBySlug($slug)) {
             throw new \InvalidArgumentException("Plan slug '{$slug}' already exists.");
@@ -35,7 +38,8 @@ final class CreatePlan
             $slug,
             $name,
             $description,
-            $isActive
+            $isActive,
+            $metadata
         );
 
         $this->planRepo->save($plan);

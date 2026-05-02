@@ -802,3 +802,153 @@ ASE is production-ready and battle-tested. For issues or enhancements, open an i
 MIT — © Lemur Bookstores (2026)
 
 **Status:** ✅ Production Ready (v1.0.0)
+
+---
+
+## Plan Metadata (Custom Attributes)
+
+Every plan can store **flexible custom attributes** as JSON in the `metadata` column. This is ideal for:
+- `is_recommended`: Flag the most popular plan
+- `billing_type`: Mark annual/monthly discounts
+- `max_users`: Seat limits
+- `features`: Array of included features
+- `support_level`: tier or SLA info
+- Custom fields per your business model
+
+### Creating a Plan with Metadata
+
+```php
+$plan = AseManager::createPlan(
+    'enterprise',
+    'Enterprise Plan',
+    'Full-featured plan for large orgs',
+    true,
+    [
+        'is_recommended' => true,
+        'billing_type'   => 'annual',
+        'max_users'      => 500,
+        'support_level'  => 'premium',
+        'features'       => ['api', 'webhooks', 'sso', 'advanced_reporting'],
+        'custom_sla'     => '99.95%'
+    ]
+);
+
+// Returns:
+// [
+//     'id'          => 'uuid',
+//     'slug'        => 'enterprise',
+//     'name'        => 'Enterprise Plan',
+//     'description' => '...',
+//     'is_active'   => true,
+//     'metadata'    => ['is_recommended' => true, ...]
+// ]
+```
+
+### Accessing Metadata in Code
+
+```php
+// After retrieving a plan via repository
+$planRepo = new LemurPlanRepository();
+$plan = $planRepo->findBySlug('enterprise');
+
+// Get entire metadata
+$meta = $plan->metadata();
+
+// Get specific attribute with optional default
+$maxUsers = $plan->getMetadata('max_users', 10);  // defaults to 10 if not set
+$isRecommended = $plan->getMetadata('is_recommended', false);
+
+// Check if key exists (null values return false)
+if ($plan->hasMetadata('features')) {
+    $features = $plan->getMetadata('features');
+}
+```
+
+### Querying Plans by Metadata
+
+For admin dashboards and filtering:
+
+```php
+// MySQL: Get all recommended plans
+$db = LemurInstance::get();
+$recommended = $db->query('ase_plans')
+    ->where([
+        'is_active' => 1
+    ])
+    ->get();
+
+// Filter in PHP (LemurDB does not support JSON_EXTRACT in WHERE yet)
+$recommended = array_filter($recommended, function($row) {
+    $metadata = json_decode($row['metadata'] ?? '{}', true);
+    return $metadata['is_recommended'] ?? false;
+});
+```
+
+### Metadata Examples
+
+**Basic Plan (Starter)**
+```json
+{
+  "billing_type": "monthly",
+  "max_users": 5,
+  "features": ["basic_support", "5GB_storage"],
+  "is_recommended": false
+}
+```
+
+**Popular Plan (Professional)**
+```json
+{
+  "billing_type": "monthly",
+  "max_users": 50,
+  "features": ["priority_support", "100GB_storage", "api_access", "webhooks"],
+  "is_recommended": true,
+  "highlight": "Most Popular"
+}
+```
+
+**Enterprise Plan**
+```json
+{
+  "billing_type": "annual",
+  "max_users": null,
+  "features": ["24/7_support", "unlimited_storage", "custom_integrations", "sso"],
+  "is_recommended": false,
+  "support_level": "premium",
+  "sla": "99.99%",
+  "dedicated_account_manager": true
+}
+```
+
+### Database Representation
+
+The `ase_plans` table now includes:
+
+```sql
+CREATE TABLE ase_plans (
+    id CHAR(36) PRIMARY KEY,
+    short_id CHAR(12) NOT NULL UNIQUE,
+    slug VARCHAR(100) NOT NULL UNIQUE,
+    name VARCHAR(150) NOT NULL,
+    description TEXT,
+    is_active BOOLEAN DEFAULT 1,
+    metadata JSON DEFAULT NULL,  -- ← Flexible custom attributes
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
+
+### Migration
+
+The metadata column was added via migration:
+
+```bash
+# Applied automatically during schema setup
+php bin/ase-migrate migrate
+
+# You can verify it exists:
+php bin/ase-migrate status
+```
+
+---
+
