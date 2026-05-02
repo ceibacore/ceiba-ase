@@ -135,7 +135,16 @@ final class AseSchemaBuilder
     {
         $this->sqlLog[] = $sql;
         if (!$this->dryRun) {
-            $this->pdo->exec($sql);
+            try {
+                $this->pdo->exec($sql);
+            } catch (\PDOException $e) {
+                throw new \RuntimeException(
+                    "Migration SQL error: " . $e->getMessage() . "\n" .
+                    "SQL: " . $sql,
+                    (int)$e->getCode(),
+                    $e
+                );
+            }
         }
     }
 
