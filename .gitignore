@@ -4,5 +4,6 @@ lemurdb/LICENSE
 lemurdb/lemurdb_debug_examples.php
 lemurdb/tests/test.php
 composer.lock
+.phpunit.cache/
 vendor/
 docs/
