@@ -10,7 +10,7 @@ interface PaymentGatewayInterface
      * Create a checkout session/link for the order.
      * Returns an array with ['checkout_url' => string, 'external_id' => string]
      */
-    public function createCheckoutSession(Order $order): array;
+    public function createCheckoutSession(Order $order, string $successUrl, string $cancelUrl): array;
 
     /**
      * Validate if the webhook request is authentic.

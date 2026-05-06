@@ -22,25 +22,68 @@ final class PayPalAdapter implements PaymentGatewayInterface
         private readonly bool   $sandbox = false
     ) {}
 
+    private function getAccessToken(): string
+    {
+        $client = new \GuzzleHttp\Client([
+            'base_uri' => $this->sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com',
+        ]);
+        $response = $client->post('/v1/oauth2/token', [
+            'auth' => [$this->clientId, $this->clientSecret],
+            'form_params' => ['grant_type' => 'client_credentials']
+        ]);
+        return json_decode((string)$response->getBody(), true)['access_token'];
+    }
+
     /**
-     * Create a PayPal checkout session (billing agreement setup).
+     * Create a PayPal checkout session (billing agreement setup or order).
      *
      * Uses PayPal credentials injected via constructor ($clientId, $clientSecret, $webhookId).
-     * If plan has trial_days, include it in the setup.
      *
      * @param Order $order The order to create checkout for
      * @return array ['checkout_url' => string, 'external_id' => string]
      */
-    public function createCheckoutSession(Order $order): array
+    public function createCheckoutSession(Order $order, string $successUrl, string $cancelUrl): array
     {
-        // In production, call PayPal API with $this->clientId and $this->clientSecret
-        // Create a billing agreement or subscription on api-m.sandbox.paypal.com or api-m.paypal.com
-        // based on $this->sandbox flag
+        $token = $this->getAccessToken();
+        $client = new \GuzzleHttp\Client([
+            'base_uri' => $this->sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com',
+        ]);
 
-        // Mock response
+        $response = $client->post('/v2/checkout/orders', [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $token,
+                'Content-Type' => 'application/json',
+                'Prefer' => 'return=representation'
+            ],
+            'json' => [
+                'intent' => 'CAPTURE',
+                'purchase_units' => [[
+                    'custom_id' => $order->id()->toString(),
+                    'amount' => [
+                        'currency_code' => strtoupper($order->amount()->currency()->value),
+                        'value' => (string) round($order->amount()->amount(), 2)
+                    ]
+                ]],
+                'application_context' => [
+                    'return_url' => $successUrl,
+                    'cancel_url' => $cancelUrl,
+                ]
+            ]
+        ]);
+
+        $data = json_decode((string)$response->getBody(), true);
+        
+        $checkoutUrl = '';
+        foreach ($data['links'] ?? [] as $link) {
+            if ($link['rel'] === 'approve') {
+                $checkoutUrl = $link['href'];
+                break;
+            }
+        }
+
         return [
-            'checkout_url' => "https://www.paypal.com/checkoutnow?token=" . bin2hex(random_bytes(10)),
-            'external_id' => "PAYID-" . bin2hex(random_bytes(10))
+            'checkout_url' => $checkoutUrl,
+            'external_id' => $data['id'] ?? null
         ];
     }
 
@@ -82,79 +125,37 @@ final class PayPalAdapter implements PaymentGatewayInterface
             return false;
         }
 
-        // Guard against replay attacks: timestamp must be recent
         try {
-            $eventTime = \DateTimeImmutable::createFromFormat('Y-m-d\TH:i:s\Z', $transmissionTime);
-            $now = new \DateTimeImmutable();
-            $maxAge = 300; // 5 minutes
+            $token = $this->getAccessToken();
+            $client = new \GuzzleHttp\Client([
+                'base_uri' => $this->sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com',
+            ]);
 
-            if ($eventTime && $now->getTimestamp() - $eventTime->getTimestamp() > $maxAge) {
-                error_log("PayPal: webhook timestamp outside acceptable range (possible replay attack)");
-                return false;
-            }
-        } catch (\Exception $e) {
-            error_log("PayPal: invalid transmission time format: {$transmissionTime}");
-            return false;
-        }
+            $verifyResponse = $client->post('/v1/notifications/verify-webhook-signature', [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $token,
+                    'Content-Type' => 'application/json'
+                ],
+                'json' => [
+                    'auth_algo' => $authAlgo,
+                    'cert_url' => $certUrl,
+                    'transmission_id' => $transmissionId,
+                    'transmission_sig' => $signature,
+                    'transmission_time' => $transmissionTime,
+                    'webhook_id' => $this->webhookId,
+                    'webhook_event' => $payload
+                ]
+            ]);
 
-        // Verify cert URL domain (security check)
-        $certHost = parse_url($certUrl, PHP_URL_HOST);
-        if (!in_array($certHost, ['api.paypal.com', 'api.sandbox.paypal.com'], true)) {
-            error_log("PayPal: cert URL has invalid domain: {$certHost}");
-            return false;
-        }
-
-        // Fetch and verify certificate
-        try {
-            // In production, cache the certificate
-            $certPem = @file_get_contents($certUrl);
-            if (!$certPem) {
-                error_log("PayPal: failed to fetch certificate from {$certUrl}");
-                return false;
-            }
-
-            // Create verification string
-            $verifyString = "{$transmissionId}|{$transmissionTime}|" . json_encode($payload) . "|{$authAlgo}";
-
-            // Extract public key from certificate
-            $cert = openssl_x509_read($certPem);
-            if (!$cert) {
-                error_log("PayPal: invalid certificate format");
-                return false;
-            }
-
-            $pubKey = openssl_pkey_get_public($cert);
-            if (!$pubKey) {
-                error_log("PayPal: failed to extract public key from certificate");
-                return false;
-            }
-
-            // Get the raw body from headers (passed by WebhookRequestHandler via AseManager)
-            $rawBody = $headers['X-RAW-BODY'] ?? '';
-            if (!$rawBody) {
-                error_log("PayPal: missing raw body for signature verification");
-                return false;
-            }
-
-            // Verify signature using OpenSSL
-            // Signature should be base64 encoded
-            $signatureBytes = base64_decode($signature);
-            $result = openssl_verify(
-                $verifyString,
-                $signatureBytes,
-                $pubKey,
-                OPENSSL_ALGO_SHA256
-            );
-
-            if ($result === 1) {
+            $result = json_decode((string)$verifyResponse->getBody(), true);
+            
+            if (($result['verification_status'] ?? '') === 'SUCCESS') {
                 return true;
-            } elseif ($result === 0) {
-                error_log("PayPal: signature verification failed");
-                return false;
-            } else {
-                error_log("PayPal: signature verification error");
-                return false;
             }
+            
+            error_log("PayPal: signature verification failed via API. Result: " . json_encode($result));
+            return false;
+
         } catch (\Exception $e) {
             error_log("PayPal: signature verification exception: " . $e->getMessage());
             return false;
@@ -210,26 +211,30 @@ final class PayPalAdapter implements PaymentGatewayInterface
     public function refund(string $externalTransactionId, float $amount, string $reason): array
     {
         try {
-            // In production, call PayPal Refund API:
-            // POST /v2/payments/captures/{id}/refund or /v2/payments/sales/{id}/refund
-            //
-            // $response = $client->post(
-            //     "/v2/payments/captures/{$externalTransactionId}/refund",
-            //     [
-            //         'amount' => ['currency_code' => 'USD', 'value' => $amount],
-            //         'note_to_payer' => $reason
-            //     ]
-            // );
-            //
-            // return [
-            //     'status' => 'success',
-            //     'external_refund_id' => $response['id']
-            // ];
+            $token = $this->getAccessToken();
+            $client = new \GuzzleHttp\Client([
+                'base_uri' => $this->sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com',
+            ]);
 
-            // For now, return mock success
+            $response = $client->post("/v2/payments/captures/{$externalTransactionId}/refund", [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $token,
+                    'Content-Type' => 'application/json'
+                ],
+                'json' => [
+                    'amount' => [
+                        'value' => (string) round($amount, 2),
+                        'currency_code' => 'USD'
+                    ],
+                    'note_to_payer' => $reason
+                ]
+            ]);
+
+            $data = json_decode((string)$response->getBody(), true);
+
             return [
                 'status' => 'success',
-                'external_refund_id' => 'REFUND-' . bin2hex(random_bytes(8))
+                'external_refund_id' => $data['id'] ?? null
             ];
         } catch (\Exception $e) {
             return [

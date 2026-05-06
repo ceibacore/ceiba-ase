@@ -13,6 +13,7 @@ use LemurAse\Domain\Repositories\PlanPriceRepositoryInterface;
 use LemurAse\Domain\Services\BillingPeriodCalculator;
 use LemurAse\Shared\LemurInstance;
 use LemurAse\Infrastructure\Persistence\TableNames;
+use LemurAse\Infrastructure\Events\AseEventDispatcher;
 
 final class ProcessWebhook
 {
@@ -122,6 +123,8 @@ final class ProcessWebhook
         }
 
         $this->createInvoice($order, $subId, $invoiceAmount, $invoiceStatus, $periodStart, $periodEnd);
+
+        AseEventDispatcher::dispatch('subscription.created', $subscription);
     }
 
     private function handleRenewal(array $eventData): void
@@ -168,6 +171,8 @@ final class ProcessWebhook
 
         // Create a NEW Invoice for this renewal (maintains billing history)
         $this->createInvoice($order, $subscription->id(), $eventData['amount'], 'paid', $newStart, $newEnd);
+
+        AseEventDispatcher::dispatch('subscription.renewed', $updatedSub);
     }
 
     private function handlePaymentFailed(array $eventData): void
@@ -184,6 +189,8 @@ final class ProcessWebhook
             null, $subscription->externalSubscriptionId()
         );
         $this->subRepo->save($updatedSub);
+
+        AseEventDispatcher::dispatch('payment.failed', $updatedSub);
     }
 
     private function handleCancellation(array $eventData): void
@@ -200,6 +207,8 @@ final class ProcessWebhook
             $subscription->externalSubscriptionId()
         );
         $this->subRepo->save($updatedSub);
+
+        AseEventDispatcher::dispatch('subscription.canceled', $updatedSub);
     }
 
     private function handleSubscriptionUpdated(array $eventData): void
@@ -248,6 +257,8 @@ final class ProcessWebhook
         );
 
         $this->subRepo->save($updated);
+
+        AseEventDispatcher::dispatch('subscription.updated', $updated);
     }
 
     /**
@@ -282,6 +293,8 @@ final class ProcessWebhook
         );
 
         $processRefund->execute($eventData);
+
+        AseEventDispatcher::dispatch('refund.processed', $eventData);
     }
 
     private function createInvoice(
@@ -310,6 +323,12 @@ final class ProcessWebhook
             $status === 'paid' ? new \DateTimeImmutable() : null  // paid_at only if paid
         );
         $this->invoiceRepo->save($invoice);
+
+        if ($status === 'paid') {
+            AseEventDispatcher::dispatch('invoice.paid', $invoice);
+        } else {
+            AseEventDispatcher::dispatch('invoice.generated', $invoice);
+        }
     }
 
     private function logTransaction(string $action, array $eventData): void

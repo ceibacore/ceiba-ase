@@ -105,7 +105,9 @@ $selectedGatewayId = $gateways[0]['id'];
 $checkoutUrl = AseManager::createCheckoutSession(
     $clientId,
     $priceId,
-    $selectedGatewayId
+    $selectedGatewayId,
+    'https://your-domain.com/success?session_id={CHECKOUT_SESSION_ID}', // {CHECKOUT_SESSION_ID} is supported by Stripe
+    'https://your-domain.com/cancel'
 );
 
 // Redirect user
@@ -132,6 +134,30 @@ Route::post('/ase/webhooks/stripe/{gatewayId}', function($gatewayId) {
 // ✅ Invoice generation
 // ✅ Idempotency checking
 ```
+
+### 6. Listen to Domain Events
+
+The host application can hook into the engine's lifecycle safely without touching the database or handling complex logic. Register your listeners in your app's boot phase (e.g., `AppServiceProvider` in Laravel):
+
+```php
+use LemurAse\AseManager;
+
+// Grant course access when a subscription starts or renews
+AseManager::listen('subscription.created', function($subscription) {
+    MyLmsAccessService::grant($subscription->externalClientId());
+});
+
+// Revoke access when canceled or unpaid
+AseManager::listen('subscription.canceled', function($subscription) {
+    MyLmsAccessService::revoke($subscription->externalClientId());
+});
+
+// Sync invoices with accounting software
+AseManager::listen('invoice.paid', function($invoice) {
+    AccountingApi::syncInvoice($invoice);
+});
+```
+**Available Events:** `subscription.created`, `subscription.renewed`, `subscription.updated`, `subscription.canceled`, `payment.failed`, `invoice.generated`, `invoice.paid`, `refund.processed`.
 
 ---
 
@@ -761,6 +787,26 @@ All technical documents live in [`docs/`](docs/) and [`docs-ia/ase/`](../docs-ia
 
 ---
 
+
+## Gateway Configuration Forms (GatewayFormManager)
+
+> **Design principle:** Forms render as standard HTML — fully functional without JavaScript. Vanilla JS is an optional progressive enhancement layer (conditionals, live masking) that does not affect server-side behaviour.
+
+The `GatewayFormManager` provides a provider-agnostic, secure, and standalone gateway credential configuration system. It renders server-side HTML, protects from CSRF (stateless), encrypts credentials at rest (AES-256-GCM), and validates input.
+
+👉 **[View the full Gateway Configuration Documentation](GATEWAY_FORMMANAGER.md)** for:
+- Detailed Architecture & Files Breakdown
+- API Use Cases (Rendering, Processing, Persisting)
+- Example of Integration in **Laravel**
+
+### Environment Variables
+
+Add to `.env`:
+
+```bash
+GATEWAY_ENCRYPTION_KEY=        # 32-byte base64 key (generate: php -r "echo base64_encode(random_bytes(32));")
+GATEWAY_CSRF_SECRET=            # HMAC secret (falls back to ASE_SECRET_KEY)
+```
 ## Troubleshooting
 
 ### "Gateway not found" error

@@ -1,17 +1,32 @@
 <?php
 
+declare(strict_types=1);
+
 namespace LemurAse\Infrastructure\Persistence;
 
 use LemurAse\Domain\Entities\Gateway;
 use LemurAse\Domain\Repositories\GatewayRepositoryInterface;
 use LemurAse\Domain\ValueObjects\EntityId;
+use LemurAse\Infrastructure\Security\CredentialEncryptor;
 use LemurAse\Shared\LemurInstance;
 
 final class LemurGatewayRepository implements GatewayRepositoryInterface
 {
+    private ?CredentialEncryptor $encryptor;
+
+    public function __construct()
+    {
+        // Encryptor is optional — if GATEWAY_ENCRYPTION_KEY is not set,
+        // credentials are stored as plaintext JSON (legacy / dev mode).
+        // Production deployments MUST set GATEWAY_ENCRYPTION_KEY.
+        $key = (string) getenv('GATEWAY_ENCRYPTION_KEY');
+        $this->encryptor = $key !== '' ? new CredentialEncryptor($key) : null;
+    }
+
     public function save(Gateway $gateway): void
     {
         $db = LemurInstance::get();
+
         $existing = $db->query(TableNames::GATEWAYS)
             ->where(['id' => $gateway->id()->uuid()])
             ->first();
@@ -20,7 +35,7 @@ final class LemurGatewayRepository implements GatewayRepositoryInterface
             'id'          => $gateway->id()->uuid(),
             'short_id'    => $gateway->id()->short(),
             'provider'    => $gateway->provider(),
-            'credentials' => json_encode($gateway->credentials(), JSON_UNESCAPED_SLASHES),
+            'credentials' => $this->encodeCredentials($gateway->credentials()),
             'is_active'   => $gateway->isActive() ? 1 : 0,
         ];
 
@@ -44,13 +59,6 @@ final class LemurGatewayRepository implements GatewayRepositoryInterface
         return $row ? $this->hydrateGateway($row) : null;
     }
 
-    /**
-     * Find all gateways (enabled or disabled).
-     * 
-     * Performance: O(n) where n = total gateways (typically 1-5)
-     * 
-     * @return array Array of Gateway entities
-     */
     public function findAll(): array
     {
         $rows = LemurInstance::get()
@@ -61,14 +69,6 @@ final class LemurGatewayRepository implements GatewayRepositoryInterface
         return array_map(fn($row) => $this->hydrateGateway($row), $rows ?? []);
     }
 
-    /**
-     * Find all ENABLED gateways only.
-     * 
-     * Performance: O(n) with index on (is_active) column
-     * Typical response: 0.5ms for 2-5 active gateways
-     * 
-     * @return array Array of enabled Gateway entities
-     */
     public function findAllEnabled(): array
     {
         $rows = LemurInstance::get()
@@ -90,23 +90,46 @@ final class LemurGatewayRepository implements GatewayRepositoryInterface
         return $row ? $this->hydrateGateway($row) : null;
     }
 
-    /**
-     * Convert a database row to a Gateway entity.
-     * 
-     * @param array $row Database row
-     * @return Gateway entity
-     */
+    // ── Encryption helpers ────────────────────────────────────────────────────
+
+    private function encodeCredentials(array $credentials): string
+    {
+        if ($this->encryptor !== null) {
+            return $this->encryptor->encrypt($credentials);
+        }
+
+        // Plaintext fallback (dev / no key configured)
+        return json_encode($credentials, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    }
+
+    private function decodeCredentials(mixed $stored): array
+    {
+        if (is_array($stored)) {
+            // Some DB drivers auto-decode JSON columns
+            return $stored;
+        }
+
+        $stored = (string) $stored;
+
+        if ($this->encryptor !== null && $this->encryptor->isEncrypted($stored)) {
+            return $this->encryptor->decrypt($stored);
+        }
+
+        // Plaintext JSON (legacy or dev mode)
+        $decoded = json_decode($stored, associative: true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    // ── Hydration ─────────────────────────────────────────────────────────────
+
     protected function hydrateGateway(array $row): Gateway
     {
-        $credentials = is_array($row['credentials'])
-            ? $row['credentials']
-            : json_decode($row['credentials'], true) ?? [];
-
         return new Gateway(
             EntityId::fromString($row['id']),
             $row['provider'],
-            $credentials,
-            (bool) $row['is_active']
+            $this->decodeCredentials($row['credentials']),
+            (bool) $row['is_active'],
         );
     }
 }

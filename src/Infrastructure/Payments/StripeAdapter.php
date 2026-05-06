@@ -34,16 +34,40 @@ final class StripeAdapter implements PaymentGatewayInterface
      * @param Order $order The order to create checkout for
      * @return array ['checkout_url' => string, 'external_id' => string]
      */
-    public function createCheckoutSession(Order $order): array
+    public function createCheckoutSession(Order $order, string $successUrl, string $cancelUrl): array
     {
-        // In production, use $this->secretKey:
-        // \Stripe\Stripe::setApiKey($this->secretKey);
-        // $session = \Stripe\Checkout\Session::create([...]);
+        \Stripe\Stripe::setApiKey($this->secretKey);
 
-        // Mock response
+        // Ensure Stripe session ID is appended to success URL if the developer omitted it
+        if (strpos($successUrl, '{CHECKOUT_SESSION_ID}') === false) {
+            $separator = (strpos($successUrl, '?') !== false) ? '&' : '?';
+            $successUrl .= $separator . 'session_id={CHECKOUT_SESSION_ID}';
+        }
+
+        $session = \Stripe\Checkout\Session::create([
+            'payment_method_types' => ['card'],
+            'line_items' => [[
+                'price_data' => [
+                    'currency' => strtolower($order->amount()->currency()->value),
+                    'product_data' => [
+                        'name' => 'Subscription',
+                    ],
+                    'unit_amount' => (int) round($order->amount()->amount() * 100),
+                ],
+                'quantity' => 1,
+            ]],
+            'mode' => 'payment', // Can be changed to 'subscription' if needed
+            'client_reference_id' => $order->externalClientId(),
+            'metadata' => [
+                'order_id' => $order->id()->toString(),
+            ],
+            'success_url' => $successUrl,
+            'cancel_url' => $cancelUrl,
+        ]);
+
         return [
-            'checkout_url' => "https://checkout.stripe.com/pay/" . bin2hex(random_bytes(16)),
-            'external_id' => "cs_test_" . bin2hex(random_bytes(16))
+            'checkout_url' => $session->url,
+            'external_id' => $session->id
         ];
     }
 
@@ -60,68 +84,30 @@ final class StripeAdapter implements PaymentGatewayInterface
     public function validateWebhook(array $payload, array $headers): bool
     {
         if (!$this->webhookSecret) {
-            // Webhook secret not configured; reject all webhooks
             error_log("Stripe: webhook secret not configured");
             return false;
         }
 
-        // Get the Stripe signature header (case-insensitive)
         $sigHeader = $headers['stripe-signature'] 
                   ?? $headers['Stripe-Signature'] 
                   ?? $headers['STRIPE-SIGNATURE'] 
                   ?? '';
 
-        if (!$sigHeader) {
-            error_log("Stripe: missing stripe-signature header");
-            return false;
-        }
-
-        // Parse signature header: "t=<timestamp>,v1=<signature>"
-        // Example: "t=1492774428,v1=5257a869e7ecebeda32affa2d3eb21eb1ef6dc88,v0=..."
-        $parts = [];
-        foreach (explode(',', $sigHeader) as $part) {
-            if (strpos($part, '=') === false) continue;
-            [$k, $v] = explode('=', $part, 2);
-            $parts[$k] = $v;
-        }
-
-        $timestamp = $parts['t'] ?? null;
-        $signature = $parts['v1'] ?? null;
-
-        if (!$timestamp || !$signature) {
-            error_log("Stripe: invalid signature header format");
-            return false;
-        }
-
-        // Guard against replay attacks: timestamp must be within ±5 minutes of now
-        $maxAge = 300; // 5 minutes
-        $now = time();
-        if (abs($now - (int)$timestamp) > $maxAge) {
-            error_log("Stripe: webhook timestamp outside acceptable range (possible replay attack)");
-            return false;
-        }
-
-        // Get the raw body from headers (passed by WebhookRequestHandler via AseManager)
         $rawBody = $headers['X-RAW-BODY'] ?? '';
-        if (!$rawBody) {
-            error_log("Stripe: missing raw body for signature verification");
+
+        try {
+            // This method validates the signature and the timestamp automatically
+            \Stripe\WebhookSignature::verifyHeader(
+                $rawBody,
+                $sigHeader,
+                $this->webhookSecret,
+                300 // 5 minutes tolerance
+            );
+            return true;
+        } catch (\Stripe\Exception\SignatureVerificationException $e) {
+            error_log("Stripe: signature verification failed: " . $e->getMessage());
             return false;
         }
-
-        // Reconstruct the signed content: "{timestamp}.{raw_body}"
-        // Using the EXACT raw bytes from the request for security
-        $signedContent = "{$timestamp}.{$rawBody}";
-
-        // Compute HMAC-SHA256
-        $expectedSignature = hash_hmac('sha256', $signedContent, $this->webhookSecret);
-
-        // Use hash_equals to prevent timing attacks
-        if (!hash_equals($expectedSignature, $signature)) {
-            error_log("Stripe: signature mismatch (invalid webhook or tampered data)");
-            return false;
-        }
-
-        return true;
     }
 
     /**
@@ -193,23 +179,17 @@ final class StripeAdapter implements PaymentGatewayInterface
     public function refund(string $externalTransactionId, float $amount, string $reason): array
     {
         try {
-            // In production, call Stripe API:
-            // $refund = \Stripe\Refund::create([
-            //     'charge' => $externalTransactionId,
-            //     'amount' => (int)($amount * 100), // Convert to cents
-            //     'reason' => $reason,
-            //     'metadata' => ['refund_reason' => $reason]
-            // ]);
-            //
-            // return [
-            //     'status' => 'success',
-            //     'external_refund_id' => $refund->id
-            // ];
+            \Stripe\Stripe::setApiKey($this->secretKey);
+            $refund = \Stripe\Refund::create([
+                'charge' => $externalTransactionId,
+                'amount' => (int) round($amount * 100), // Convert to cents
+                'reason' => $reason === 'fraudulent' ? 'fraudulent' : 'requested_by_customer',
+                'metadata' => ['refund_reason' => $reason]
+            ]);
 
-            // For now, return mock success
             return [
                 'status' => 'success',
-                'external_refund_id' => 're_test_' . bin2hex(random_bytes(8))
+                'external_refund_id' => $refund->id
             ];
         } catch (\Exception $e) {
             return [
