@@ -159,6 +159,14 @@ AseManager::listen('invoice.paid', function($invoice) {
 ```
 **Available Events:** `subscription.created`, `subscription.renewed`, `subscription.updated`, `subscription.canceled`, `payment.failed`, `invoice.generated`, `invoice.paid`, `refund.processed`.
 
+#### 🛠️ Event System Features (Powered by `AseEventDispatcher`)
+
+The internal event system is designed for high reliability:
+- **Error Isolation:** If a listener throws an exception, ASE catches it, logs it to `error_log`, and continues executing other listeners. Your application errors won't break the billing flow.
+- **Multiple Listeners:** You can attach any number of listeners to the same event.
+- **Static Dispatcher:** No dependency injection required; just call `AseManager::listen()`.
+- **Testing Support:** Use `AseEventDispatcher::forget()` to clear listeners between test cases.
+
 ---
 
 ## Architecture
@@ -307,6 +315,8 @@ lemur-ase/
 │   │   ├── Payments/
 │   │   │   ├── StripeAdapter.php         ← Real HMAC-SHA256 validation
 │   │   │   └── PayPalAdapter.php         ← Real RSA-SHA256 validation
+│   │   ├── Events/
+│   │   │   └── AseEventDispatcher.php    ← Robust event system
 │   │   └── Webhook/
 │   │       └── WebhookRequestHandler.php
 │   │

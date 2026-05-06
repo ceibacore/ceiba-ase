@@ -21,7 +21,6 @@ use LemurAse\Infrastructure\Persistence\LemurInvoiceRepository;
 use LemurAse\Infrastructure\Persistence\LemurTransactionLogRepository;
 use LemurAse\Infrastructure\Persistence\LemurPlanRepository;
 use LemurAse\Infrastructure\Persistence\LemurGatewayRepository;
-use LemurAse\Infrastructure\Payments\StripeAdapter;
 use LemurAse\Infrastructure\Payments\GatewayAdapterRegistry;
 use LemurAse\Infrastructure\Events\AseEventDispatcher;
 use LemurAse\Domain\Gateways\PaymentGatewayInterface;
@@ -612,6 +611,24 @@ final class AseManager
         }
 
         return null;
+    }
+
+    /**
+     * Get raw credentials for a provider. 
+     * WARNING: Use only for admin configuration forms.
+     */
+    public static function getGatewayCredentialsByProvider(string $provider): array
+    {
+        $manager = self::getInstance();
+        $gateways = $manager->gatewayRepo->findAll();
+
+        foreach ($gateways as $gateway) {
+            if ($gateway->provider() === $provider) {
+                return $gateway->credentials();
+            }
+        }
+
+        return [];
     }
 
     /**
