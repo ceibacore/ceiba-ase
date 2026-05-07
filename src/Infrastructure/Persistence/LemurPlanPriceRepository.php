@@ -49,12 +49,33 @@ final class LemurPlanPriceRepository implements PlanPriceRepositoryInterface
 
         if (!$row) return null;
 
+        return $this->hydrate($row);
+    }
+
+    /**
+     * Find all active prices for a specific plan.
+     */
+    public function findAllActiveByPlanId(EntityId $planId): array
+    {
+        $db = LemurInstance::get();
+        $rows = $db->query(TableNames::PLAN_PRICES)
+            ->where([
+                'plan_id'   => $planId->uuid(),
+                'is_active' => 1
+            ])
+            ->get();
+
+        return array_map([$this, 'hydrate'], $rows);
+    }
+
+    private function hydrate(array $row): PlanPrice
+    {
         return new PlanPrice(
             EntityId::fromString($row['id']),
             EntityId::fromString($row['plan_id']),
             $row['type'],
             Money::create((float)$row['amount'], Currency::fromString($row['currency'])),
-            $row['interval'],
+            $row['interval'] ?? null,
             (int)$row['interval_count'],
             (int)$row['trial_days'],
             (bool)$row['is_active']

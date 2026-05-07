@@ -24,7 +24,8 @@ final class ProcessRefund
         private readonly OrderRepositoryInterface $orderRepo,
         private readonly SubscriptionRepositoryInterface $subscriptionRepo,
         private readonly ?PaymentGatewayInterface $paymentGateway = null
-    ) {}
+    ) {
+    }
 
     /**
      * Execute the refund processing logic.
@@ -106,8 +107,7 @@ final class ProcessRefund
 
         $db = LemurInstance::get();
         $exists = $db->query(TableNames::TRANSACTIONS_LOG)
-            ->where('external_transaction_id', $externalRefundId)
-            ->where('type', 'refund')
+            ->where(['external_transaction_id' => $externalRefundId, 'type' => 'refund'])
             ->exists();
 
         return $exists;
