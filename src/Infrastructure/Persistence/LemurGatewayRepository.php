@@ -8,7 +8,7 @@ use LemurAse\Domain\Entities\Gateway;
 use LemurAse\Domain\Repositories\GatewayRepositoryInterface;
 use LemurAse\Domain\ValueObjects\EntityId;
 use LemurAse\Infrastructure\Security\CredentialEncryptor;
-use LemurAse\Shared\LemurInstance;
+use LemurAse\Shared\Infrastructure\LemurInstance;
 
 final class LemurGatewayRepository implements GatewayRepositoryInterface
 {

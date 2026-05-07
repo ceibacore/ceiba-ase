@@ -4,7 +4,7 @@ namespace LemurAse\Infrastructure\Persistence;
 
 use LemurAse\Domain\ValueObjects\EntityId;
 use LemurAse\Domain\Repositories\CustomPriceRepositoryInterface;
-use LemurAse\Shared\LemurInstance;
+use LemurAse\Shared\Infrastructure\LemurInstance;
 use LemurAse\Infrastructure\Persistence\TableNames;
 
 final class LemurCustomPriceRepository implements CustomPriceRepositoryInterface

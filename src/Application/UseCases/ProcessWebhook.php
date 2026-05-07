@@ -11,7 +11,7 @@ use LemurAse\Domain\Repositories\InvoiceRepositoryInterface;
 use LemurAse\Domain\Repositories\TransactionLogRepositoryInterface;
 use LemurAse\Domain\Repositories\PlanPriceRepositoryInterface;
 use LemurAse\Domain\Services\BillingPeriodCalculator;
-use LemurAse\Shared\LemurInstance;
+use LemurAse\Shared\Infrastructure\LemurInstance;
 use LemurAse\Infrastructure\Persistence\TableNames;
 use LemurAse\Infrastructure\Events\AseEventDispatcher;
 

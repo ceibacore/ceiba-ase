@@ -5,7 +5,7 @@ namespace LemurAse\Infrastructure\Persistence;
 use LemurAse\Domain\Entities\Plan;
 use LemurAse\Domain\Repositories\PlanRepositoryInterface;
 use LemurAse\Domain\ValueObjects\EntityId;
-use LemurAse\Shared\LemurInstance;
+use LemurAse\Shared\Infrastructure\LemurInstance;
 
 final class LemurPlanRepository implements PlanRepositoryInterface
 {

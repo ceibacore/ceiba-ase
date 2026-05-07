@@ -7,7 +7,7 @@ use LemurAse\Domain\Repositories\SubscriptionRepositoryInterface;
 use LemurAse\Domain\Gateways\PaymentGatewayInterface;
 use LemurAse\Domain\Entities\Subscription;
 use LemurAse\Domain\ValueObjects\EntityId;
-use LemurAse\Shared\LemurInstance;
+use LemurAse\Shared\Infrastructure\LemurInstance;
 use LemurAse\Infrastructure\Persistence\TableNames;
 
 /**

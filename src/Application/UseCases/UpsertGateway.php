@@ -7,7 +7,7 @@ namespace LemurAse\Application\UseCases;
 use LemurAse\Domain\Entities\Gateway;
 use LemurAse\Domain\Repositories\GatewayRepositoryInterface;
 use LemurAse\Domain\ValueObjects\EntityId;
-use LemurAse\Infrastructure\Form\GatewayFormRegistry;
+use LemurAse\FormManagement\Infrastructure\GatewayFormRegistry;
 
 /**
  * Create or update a gateway by provider slug.

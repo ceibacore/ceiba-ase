@@ -2,7 +2,7 @@
 
 namespace LemurAse\Domain\Services;
 
-use LemurAse\Shared\EnvironmentGuard;
+use LemurAse\Shared\Infrastructure\EnvironmentGuard;
 
 final class SecurityService
 {

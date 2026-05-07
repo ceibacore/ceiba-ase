@@ -3,7 +3,7 @@
 namespace LemurAse\Infrastructure\Persistence;
 
 use LemurAse\Domain\Repositories\TransactionLogRepositoryInterface;
-use LemurAse\Shared\LemurInstance;
+use LemurAse\Shared\Infrastructure\LemurInstance;
 
 final class LemurTransactionLogRepository implements TransactionLogRepositoryInterface
 {

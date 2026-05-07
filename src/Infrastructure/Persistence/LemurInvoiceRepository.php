@@ -7,7 +7,7 @@ use LemurAse\Domain\ValueObjects\EntityId;
 use LemurAse\Domain\ValueObjects\Money;
 use LemurAse\Domain\ValueObjects\Currency;
 use LemurAse\Domain\Repositories\InvoiceRepositoryInterface;
-use LemurAse\Shared\LemurInstance;
+use LemurAse\Shared\Infrastructure\LemurInstance;
 
 final class LemurInvoiceRepository implements InvoiceRepositoryInterface
 {

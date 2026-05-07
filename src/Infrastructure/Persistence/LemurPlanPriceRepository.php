@@ -7,7 +7,7 @@ use LemurAse\Domain\ValueObjects\EntityId;
 use LemurAse\Domain\ValueObjects\Money;
 use LemurAse\Domain\ValueObjects\Currency;
 use LemurAse\Domain\Repositories\PlanPriceRepositoryInterface;
-use LemurAse\Shared\LemurInstance;
+use LemurAse\Shared\Infrastructure\LemurInstance;
 use LemurAse\Infrastructure\Persistence\TableNames;
 
 final class LemurPlanPriceRepository implements PlanPriceRepositoryInterface

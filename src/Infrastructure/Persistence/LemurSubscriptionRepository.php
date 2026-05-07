@@ -5,7 +5,7 @@ namespace LemurAse\Infrastructure\Persistence;
 use LemurAse\Domain\Entities\Subscription;
 use LemurAse\Domain\ValueObjects\EntityId;
 use LemurAse\Domain\Repositories\SubscriptionRepositoryInterface;
-use LemurAse\Shared\LemurInstance;
+use LemurAse\Shared\Infrastructure\LemurInstance;
 
 final class LemurSubscriptionRepository implements SubscriptionRepositoryInterface
 {

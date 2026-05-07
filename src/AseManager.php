@@ -12,7 +12,7 @@ use LemurAse\Application\UseCases\CreatePlanPrice;
 use LemurAse\Application\UseCases\CreateGateway;
 use LemurAse\Application\UseCases\UpsertGateway;
 use LemurAse\Domain\Services\SecurityService;
-use LemurAse\Shared\EnvironmentGuard;
+use LemurAse\Shared\Infrastructure\EnvironmentGuard;
 use LemurAse\Infrastructure\Persistence\LemurOrderRepository;
 use LemurAse\Infrastructure\Persistence\LemurPlanPriceRepository;
 use LemurAse\Infrastructure\Persistence\LemurCustomPriceRepository;
@@ -322,7 +322,7 @@ final class AseManager
         // In a real scenario, this would use the CustomPriceRepository to save it.
         // As LemurCustomPriceRepository only has findByClientAndPlanPrice right now, 
         // we use the query builder directly for this demo.
-        \LemurAse\Shared\LemurInstance::get()
+        \LemurAse\Shared\Infrastructure\LemurInstance::get()
             ->query(\LemurAse\Infrastructure\Persistence\TableNames::CUSTOM_PRICES)
             ->insert($data);
     }
@@ -343,7 +343,7 @@ final class AseManager
         $status = $atPeriodEnd ? 'active' : 'canceled'; // Simplified
         $canceledAt = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
-        \LemurAse\Shared\LemurInstance::get()
+        \LemurAse\Shared\Infrastructure\LemurInstance::get()
             ->query(\LemurAse\Infrastructure\Persistence\TableNames::SUBSCRIPTIONS)
             ->where(['id' => $subscriptionId])
             ->update([
@@ -624,7 +624,9 @@ final class AseManager
 
         foreach ($gateways as $gateway) {
             if ($gateway->provider() === $provider) {
-                return $gateway->credentials();
+                $creds = $gateway->credentials();
+                $creds['is_active'] = $gateway->isActive();
+                return $creds;
             }
         }
 

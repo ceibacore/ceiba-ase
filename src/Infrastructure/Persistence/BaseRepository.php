@@ -2,7 +2,7 @@
 
 namespace LemurAse\Infrastructure\Persistence;
 
-use LemurAse\Shared\LemurInstance;
+use LemurAse\Shared\Infrastructure\LemurInstance;
 use LemurQuery;
 
 abstract class BaseRepository
