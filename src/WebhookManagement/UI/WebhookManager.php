@@ -46,7 +46,7 @@ final class WebhookManager
         $ase = AseManager::getInstance();
         return new ProcessWebhookUseCase(
             $ase->orderRepo,
-            $ase->subRepo,
+            $ase->subscriptionRepo,
             $ase->invoiceRepo,
             $ase->logRepo,
             $ase->planPriceRepo
