@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace LemurAse\Infrastructure\Form\Definitions;
+namespace LemurAse\FormManagement\Infrastructure\Definitions;
 
-use LemurAse\Domain\Form\FieldDefinition;
-use LemurAse\Domain\Form\FieldType;
-use LemurAse\Domain\Form\GatewayFormDefinitionInterface;
+use LemurAse\FormManagement\Domain\FieldDefinition;
+use LemurAse\FormManagement\Domain\FieldType;
+use LemurAse\FormManagement\Domain\GatewayFormDefinitionInterface;
 
 final class PayPalFormDefinition implements GatewayFormDefinitionInterface
 {

@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace LemurAse\Infrastructure\Form;
+namespace LemurAse\FormManagement\Infrastructure;
 
-use LemurAse\Domain\Form\FieldDefinition;
-use LemurAse\Domain\Form\GatewayFormDefinitionInterface;
-use LemurAse\Infrastructure\Form\Definitions\PayPalFormDefinition;
-use LemurAse\Infrastructure\Form\Definitions\StripeFormDefinition;
+use LemurAse\FormManagement\Domain\FieldDefinition;
+use LemurAse\FormManagement\Domain\GatewayFormDefinitionInterface;
+use LemurAse\FormManagement\Infrastructure\Definitions\PayPalFormDefinition;
+use LemurAse\FormManagement\Infrastructure\Definitions\StripeFormDefinition;
 
 /**
  * Registry of all gateway form definitions.

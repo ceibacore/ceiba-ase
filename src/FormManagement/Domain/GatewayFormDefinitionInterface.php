@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace LemurAse\Domain\Form;
+namespace LemurAse\FormManagement\Domain;
 
 /**
  * Contract for a gateway form definition.

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace LemurAse\UI;
+namespace LemurAse\FormManagement\UI;
 
 /**
  * Thrown by GatewayFormManager::processSubmission() on CSRF failure
