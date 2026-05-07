@@ -5,7 +5,6 @@ namespace LemurAse;
 use LemurAse\Application\UseCases\CreateOrder;
 use LemurAse\Application\UseCases\ExpireStaleOrders;
 use LemurAse\Application\UseCases\PriceCalculator;
-use LemurAse\Application\UseCases\ProcessWebhook;
 use LemurAse\Application\UseCases\CreatePlan;
 use LemurAse\Application\UseCases\UpdatePlan;
 use LemurAse\Application\UseCases\CreatePlanPrice;
@@ -45,6 +44,7 @@ use LemurAse\Domain\ValueObjects\EntityId;
  * @method static array       getAllGateways()
  * @method static array|null  getGatewayById(string $gatewayId)
  * @method static array|null  getGatewayByProvider(string $provider)
+ * @method static array       getActivePlans()
  * @method static void        registerGatewayAdapter(string $provider, \Closure $factory)
  * @method static void        listen(string $event, callable $listener)
  */
@@ -519,6 +519,40 @@ final class AseManager
     }
 
     /**
+     * Get all active plans including their active prices.
+     */
+    public static function getActivePlans(): array
+    {
+        $manager = self::getInstance();
+        $plans   = $manager->planRepo->findAll(onlyActive: true);
+        $result  = [];
+
+        foreach ($plans as $plan) {
+            $prices = $manager->planPriceRepo->findAllActiveByPlanId($plan->id());
+            
+            $result[] = [
+                'id'          => $plan->id()->uuid(),
+                'slug'        => $plan->slug(),
+                'name'        => $plan->name(),
+                'description' => $plan->description(),
+                'is_active'   => $plan->isActive(),
+                'metadata'    => $plan->metadata(),
+                'prices'      => array_map(fn($p) => [
+                    'id'             => $p->id()->uuid(),
+                    'type'           => $p->type(),
+                    'amount'         => $p->price()->amount(),
+                    'currency'       => $p->price()->currency()->toString(),
+                    'interval'       => $p->interval(),
+                    'interval_count' => $p->intervalCount(),
+                    'trial_days'     => $p->trialDays(),
+                ], $prices)
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
      * Get all ENABLED payment gateways (providers like Stripe & PayPal that are active).
      * 
      * Developers use this to show available payment options.
@@ -557,9 +591,10 @@ final class AseManager
         $gateways = $manager->gatewayRepo->findAll();
 
         return array_map(fn($g) => [
-            'id'        => $g->id()->uuid(),
-            'provider'  => $g->provider(),
-            'is_active' => $g->isActive(),
+            'id'          => $g->id()->uuid(),
+            'provider'    => $g->provider(),
+            'is_active'   => $g->isActive(),
+            'credentials' => $g->credentials(),
         ], $gateways);
     }
 
@@ -580,9 +615,10 @@ final class AseManager
         }
 
         return [
-            'id'        => $gateway->id()->uuid(),
-            'provider'  => $gateway->provider(),
-            'is_active' => $gateway->isActive(),
+            'id'          => $gateway->id()->uuid(),
+            'provider'    => $gateway->provider(),
+            'is_active'   => $gateway->isActive(),
+            'credentials' => $gateway->credentials(),
         ];
     }
 
@@ -604,8 +640,10 @@ final class AseManager
         foreach ($gateways as $gateway) {
             if ($gateway->provider() === $provider) {
                 return [
-                    'id'       => $gateway->id()->uuid(),
-                    'provider' => $gateway->provider(),
+                    'id'          => $gateway->id()->uuid(),
+                    'provider'    => $gateway->provider(),
+                    'is_active'   => $gateway->isActive(),
+                    'credentials' => $gateway->credentials(),
                 ];
             }
         }
@@ -683,5 +721,17 @@ final class AseManager
         }
 
         return GatewayAdapterRegistry::make($gateway->provider(), $gateway->credentials());
+    }
+
+    /**
+     * Entry point to process any incoming webhook from a payment provider.
+     * 
+     * @param string $provider 'stripe', 'paypal', etc.
+     * @param string $payload  The raw body of the request (JSON)
+     * @param array  $headers  The request headers (required for signature verification)
+     */
+    public static function handleWebhook(string $provider, string $payload, array $headers = []): bool
+    {
+        return \LemurAse\WebhookManagement\UI\WebhookManager::handle($payload, $headers, $provider);
     }
 }
