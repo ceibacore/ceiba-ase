@@ -23,7 +23,7 @@ final class ProcessRefund
     public function __construct(
         private readonly OrderRepositoryInterface $orderRepo,
         private readonly SubscriptionRepositoryInterface $subscriptionRepo,
-        private readonly PaymentGatewayInterface $paymentGateway
+        private readonly ?PaymentGatewayInterface $paymentGateway = null
     ) {}
 
     /**
