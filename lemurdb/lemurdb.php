@@ -422,6 +422,15 @@ class LemurQuery {
         return $row !== false ? $row : null;
     }
 
+    /**
+     * Check if any rows exist matching the current query.
+     *
+     * @return bool
+     */
+    public function exists(): bool {
+        return $this->first() !== null;
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // INSERT
     // ─────────────────────────────────────────────────────────────────────────
