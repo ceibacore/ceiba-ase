@@ -19,8 +19,9 @@ final class PayPalAdapter implements PaymentGatewayInterface
         private readonly string $clientId,
         private readonly string $clientSecret,
         private readonly string $webhookId,
-        private readonly bool   $sandbox = false
-    ) {}
+        private readonly bool $sandbox = false
+    ) {
+    }
 
     private function getAccessToken(): string
     {
@@ -31,7 +32,7 @@ final class PayPalAdapter implements PaymentGatewayInterface
             'auth' => [$this->clientId, $this->clientSecret],
             'form_params' => ['grant_type' => 'client_credentials']
         ]);
-        return json_decode((string)$response->getBody(), true)['access_token'];
+        return json_decode((string) $response->getBody(), true)['access_token'];
     }
 
     /**
@@ -57,13 +58,15 @@ final class PayPalAdapter implements PaymentGatewayInterface
             ],
             'json' => [
                 'intent' => 'CAPTURE',
-                'purchase_units' => [[
-                    'custom_id' => $order->id()->toString(),
-                    'amount' => [
-                        'currency_code' => strtoupper($order->amount()->currency()->value),
-                        'value' => (string) round($order->amount()->amount(), 2)
+                'purchase_units' => [
+                    [
+                        'custom_id' => $order->id()->uuid(),
+                        'amount' => [
+                            'currency_code' => strtoupper($order->amount()->currency()->toString()),
+                            'value' => (string) round($order->amount()->amount(), 2)
+                        ]
                     ]
-                ]],
+                ],
                 'application_context' => [
                     'return_url' => $successUrl,
                     'cancel_url' => $cancelUrl,
@@ -71,8 +74,8 @@ final class PayPalAdapter implements PaymentGatewayInterface
             ]
         ]);
 
-        $data = json_decode((string)$response->getBody(), true);
-        
+        $data = json_decode((string) $response->getBody(), true);
+
         $checkoutUrl = '';
         foreach ($data['links'] ?? [] as $link) {
             if ($link['rel'] === 'approve') {
@@ -104,21 +107,21 @@ final class PayPalAdapter implements PaymentGatewayInterface
     public function validateWebhook(array $payload, array $headers): bool
     {
         // Extract required headers
-        $transmissionId = $headers['PAYPAL_TRANSMISSION_ID'] 
-                       ?? $headers['paypal-transmission-id'] 
-                       ?? '';
-        $transmissionTime = $headers['PAYPAL_TRANSMISSION_TIME'] 
-                         ?? $headers['paypal-transmission-time'] 
-                         ?? '';
-        $certUrl = $headers['PAYPAL_CERT_URL'] 
-                ?? $headers['paypal-cert-url'] 
-                ?? '';
-        $signature = $headers['PAYPAL_TRANSMISSION_SIG'] 
-                  ?? $headers['paypal-transmission-sig'] 
-                  ?? '';
-        $authAlgo = $headers['PAYPAL_AUTH_ALGO'] 
-                 ?? $headers['paypal-auth-algo'] 
-                 ?? 'SHA256withRSA';
+        $transmissionId = $headers['PAYPAL_TRANSMISSION_ID']
+            ?? $headers['paypal-transmission-id']
+            ?? '';
+        $transmissionTime = $headers['PAYPAL_TRANSMISSION_TIME']
+            ?? $headers['paypal-transmission-time']
+            ?? '';
+        $certUrl = $headers['PAYPAL_CERT_URL']
+            ?? $headers['paypal-cert-url']
+            ?? '';
+        $signature = $headers['PAYPAL_TRANSMISSION_SIG']
+            ?? $headers['paypal-transmission-sig']
+            ?? '';
+        $authAlgo = $headers['PAYPAL_AUTH_ALGO']
+            ?? $headers['paypal-auth-algo']
+            ?? 'SHA256withRSA';
 
         if (!$transmissionId || !$transmissionTime || !$certUrl || !$signature) {
             error_log("PayPal: missing required webhook headers");
@@ -147,12 +150,12 @@ final class PayPalAdapter implements PaymentGatewayInterface
                 ]
             ]);
 
-            $result = json_decode((string)$verifyResponse->getBody(), true);
-            
+            $result = json_decode((string) $verifyResponse->getBody(), true);
+
             if (($result['verification_status'] ?? '') === 'SUCCESS') {
                 return true;
             }
-            
+
             error_log("PayPal: signature verification failed via API. Result: " . json_encode($result));
             return false;
 
@@ -190,7 +193,7 @@ final class PayPalAdapter implements PaymentGatewayInterface
             'external_subscription_id' => $resource['billing_agreement_id'] ?? $resource['id'] ?? null,
             'external_transaction_id' => $payload['id'] ?? null,
             'internal_order_id' => $resource['custom_id'] ?? $resource['custom'] ?? null,
-            'amount' => (float)($resource['amount']['total'] ?? $resource['gross_amount']['value'] ?? 0),
+            'amount' => (float) ($resource['amount']['total'] ?? $resource['gross_amount']['value'] ?? 0),
             'currency' => strtoupper($resource['amount']['currency'] ?? $resource['gross_amount']['currency_code'] ?? 'USD'),
             'status' => 'paid',
             'external_client_id' => $resource['custom_id'] ?? null,
@@ -230,7 +233,7 @@ final class PayPalAdapter implements PaymentGatewayInterface
                 ]
             ]);
 
-            $data = json_decode((string)$response->getBody(), true);
+            $data = json_decode((string) $response->getBody(), true);
 
             return [
                 'status' => 'success',
@@ -243,5 +246,54 @@ final class PayPalAdapter implements PaymentGatewayInterface
             ];
         }
     }
-}
 
+    /**
+     * Fetch the current status of a PayPal transaction.
+     */
+    public function verifyTransaction(string $externalId): array
+    {
+        try {
+            $token = $this->getAccessToken();
+            $client = new \GuzzleHttp\Client([
+                'base_uri' => $this->sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com',
+            ]);
+
+            $response = $client->get("/v2/checkout/orders/{$externalId}", [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $token,
+                    'Content-Type' => 'application/json'
+                ]
+            ]);
+
+            $data = json_decode((string) $response->getBody(), true);
+
+            if (($data['status'] ?? '') === 'COMPLETED') {
+                return [
+                    'action' => 'INITIAL_PAYMENT',
+                    'external_id' => $data['id'],
+                    'external_transaction_id' => $data['purchase_units'][0]['payments']['captures'][0]['id'] ?? null,
+                    'amount' => (float) ($data['purchase_units'][0]['amount']['value'] ?? 0),
+                    'currency' => $data['purchase_units'][0]['amount']['currency_code'] ?? 'USD',
+                    'internal_order_id' => $data['purchase_units'][0]['custom_id'] ?? null,
+                    'raw_payload' => $data
+                ];
+            }
+
+            return ['action' => 'IGNORED', 'status' => $data['status']];
+        } catch (\Exception $e) {
+            return ['action' => 'FAILED', 'error' => $e->getMessage()];
+        }
+    }
+
+    public function cancelSubscription(string $externalId, bool $atPeriodEnd = true): array
+    {
+        // PayPal Subscriptions API implementation would go here.
+        // For now, return failed to indicate not yet implemented for PayPal.
+        return ['status' => 'failed', 'error' => 'PayPal subscription cancellation not yet implemented.'];
+    }
+
+    public function pauseSubscription(string $externalId): array
+    {
+        return ['status' => 'failed', 'error' => 'PayPal subscription pausing not yet implemented.'];
+    }
+}

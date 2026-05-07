@@ -145,12 +145,21 @@ final class AseManager
 
         // Return the first active one as array
         $sub = $subs[0];
+        
+        // Resolve plan name and amount
+        $planPrice = $manager->planPriceRepo->findById($sub->planPriceId());
+        $plan = $planPrice ? $manager->planRepo->findById($planPrice->planId()) : null;
+
         return [
             'id' => $sub->id()->uuid(),
             'order_id' => $sub->orderId()->uuid(),
             'external_client_id' => $sub->externalClientId(),
             'plan_price_id' => $sub->planPriceId()->uuid(),
+            'plan_name' => $plan ? $plan->name() : 'Plan Personalizado',
+            'amount' => $planPrice ? $planPrice->price()->amount() : 0,
+            'currency' => $planPrice ? $planPrice->price()->currency()->toString() : 'USD',
             'gateway_id' => $sub->gatewayId()->uuid(),
+            'provider' => $manager->gatewayRepo->findById($sub->gatewayId())?->provider() ?? 'unknown',
             'status' => $sub->status(),
             'current_period_start' => $sub->currentPeriodStart()?->format('Y-m-d H:i:s'),
             'current_period_end' => $sub->currentPeriodEnd()?->format('Y-m-d H:i:s'),
@@ -178,6 +187,7 @@ final class AseManager
                 'subtotal' => $inv->subtotal(),
                 'tax_amount' => $inv->taxAmount(),
                 'total' => $inv->total()->amount(),
+                'amount' => $inv->total()->amount(), // Alias for easier UI binding
                 'currency' => $inv->total()->currency()->toString(),
                 'period_start' => $inv->periodStart()?->format('Y-m-d H:i:s'),
                 'period_end' => $inv->periodEnd()?->format('Y-m-d H:i:s'),
@@ -270,7 +280,7 @@ final class AseManager
     /**
      * Admin or user action to cancel a subscription.
      */
-    public static function cancelSubscription(string $clientId, string $subscriptionId, bool $atPeriodEnd = true): void
+    public static function cancelSubscription(string $clientId, string $subscriptionId, bool $atPeriodEnd = true): array
     {
         $manager = self::getInstance();
         $sub = $manager->subscriptionRepo->findById(EntityId::fromString($subscriptionId));
@@ -279,8 +289,17 @@ final class AseManager
             throw new \InvalidArgumentException("Subscription not found or does not belong to client.");
         }
 
-        // If not at period end, cancel immediately
-        $status = $atPeriodEnd ? 'active' : 'canceled'; // Simplified
+        // 1. Cancel at Gateway level
+        $adapter = $manager->getGatewayAdapter($sub->gatewayId()->uuid());
+        $result = $adapter->cancelSubscription($sub->externalSubscriptionId(), $atPeriodEnd);
+
+        if (($result['status'] ?? 'failed') === 'failed') {
+            return $result;
+        }
+
+        // 2. Update local state
+        // If not at period end, status is 'canceled'. If at period end, status remains 'active' until webhook.
+        $status = $atPeriodEnd ? 'active' : 'canceled';
         $canceledAt = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
         \LemurAse\Shared\Infrastructure\LemurInstance::get()
@@ -290,6 +309,33 @@ final class AseManager
                 'status' => $status,
                 'canceled_at' => $canceledAt
             ]);
+
+        return ['status' => 'success'];
+    }
+
+    /**
+     * Pause a subscription.
+     */
+    public static function pauseSubscription(string $clientId, string $subscriptionId): array
+    {
+        $manager = self::getInstance();
+        $sub = $manager->subscriptionRepo->findById(EntityId::fromString($subscriptionId));
+
+        if (!$sub || $sub->externalClientId() !== $clientId) {
+            throw new \InvalidArgumentException("Subscription not found or does not belong to client.");
+        }
+
+        $adapter = $manager->getGatewayAdapter($sub->gatewayId()->uuid());
+        $result = $adapter->pauseSubscription($sub->externalSubscriptionId());
+
+        if (($result['status'] ?? 'failed') === 'success') {
+            \LemurAse\Shared\Infrastructure\LemurInstance::get()
+                ->query(\LemurAse\Infrastructure\Persistence\TableNames::SUBSCRIPTIONS)
+                ->where(['id' => $subscriptionId])
+                ->update(['status' => 'paused']);
+        }
+
+        return $result;
     }
 
     /**
@@ -605,11 +651,26 @@ final class AseManager
             if ($gateway->provider() === $provider) {
                 $creds = $gateway->credentials();
                 $creds['is_active'] = $gateway->isActive();
+                $creds['gateway_id'] = $gateway->id()->uuid();
                 return $creds;
             }
         }
 
         return [];
+    }
+
+    /**
+     * Retrieve the most recent pending order for a client.
+     */
+    public static function getClientLatestPendingOrder(string $clientId): ?array
+    {
+        $db = \LemurAse\Shared\Infrastructure\LemurInstance::get();
+        $row = $db->query(\LemurAse\Infrastructure\Persistence\TableNames::ORDERS)
+            ->where(['external_client_id' => $clientId, 'status' => 'pending'])
+            ->orderBy('created_at', 'DESC')
+            ->first();
+
+        return $row ?: null;
     }
 
     /**
@@ -674,5 +735,68 @@ final class AseManager
     public static function handleWebhook(string $provider, string $payload, array $headers = []): bool
     {
         return \LemurAse\WebhookManagement\UI\WebhookManager::handle($payload, $headers, $provider);
+    }
+
+    /**
+     * Manually synchronize an order's status with the payment gateway.
+     * Useful as a fallback when webhooks are missing or delayed.
+     */
+    public static function verifyOrder(string $orderId): bool
+    {
+        $manager = self::getInstance();
+        $order = $manager->orderRepo->findById(EntityId::fromString($orderId));
+        
+        if (!$order) {
+            throw new \RuntimeException("Order not found: {$orderId}");
+        }
+
+        // If already paid, nothing to do
+        if ($order->status() === 'paid') {
+            return true;
+        }
+
+        if (empty($order->externalOrderId())) {
+            return false;
+        }
+
+        $adapter = $manager->getGatewayAdapter($order->gatewayId()->uuid());
+        $eventData = $adapter->verifyTransaction($order->externalOrderId());
+
+        if (($eventData['action'] ?? '') === 'INITIAL_PAYMENT') {
+            $eventData['gateway_id'] = $order->gatewayId()->uuid();
+            return self::processEvent(
+                $adapter instanceof \LemurAse\Infrastructure\Payments\StripeAdapter ? 'stripe' : 'paypal',
+                'INITIAL_PAYMENT',
+                $eventData,
+                $eventData['external_id'] ?? $order->externalOrderId()
+            );
+        }
+
+        return false;
+    }
+
+    /**
+     * Process a normalized event (already validated).
+     */
+    public static function processEvent(string $provider, string $action, array $data, string $externalId): bool
+    {
+        $event = new \LemurAse\WebhookManagement\Domain\WebhookEvent(
+            action: $action,
+            data: $data,
+            externalId: $externalId,
+            provider: $provider,
+            rawPayload: $data
+        );
+
+        $manager = self::getInstance();
+        $useCase = new \LemurAse\WebhookManagement\Application\ProcessWebhookUseCase(
+            $manager->orderRepo,
+            $manager->subscriptionRepo,
+            $manager->invoiceRepo,
+            $manager->logRepo,
+            $manager->planPriceRepo
+        );
+
+        return $useCase->execute($event);
     }
 }

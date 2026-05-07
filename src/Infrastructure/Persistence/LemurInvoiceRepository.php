@@ -61,7 +61,7 @@ final class LemurInvoiceRepository implements InvoiceRepositoryInterface
         $db = LemurInstance::get();
         $rows = $db->query(TableNames::INVOICES)
             ->where(['external_client_id' => $clientId])
-            ->orderby('issued_at DESC') // Typically invoices are shown newest first
+            ->orderBy('issued_at', 'DESC')
             ->get();
             
         $entities = [];

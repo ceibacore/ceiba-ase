@@ -36,7 +36,12 @@ final class WebhookManager
         // 2. Parse and normalize
         $event = $adapter->parse($payload, $headers, $config);
 
-        // 3. Execute core logic
+        // 3. Inject gateway_id if available in config
+        if (isset($config['gateway_id'])) {
+            $event->data['gateway_id'] = $config['gateway_id'];
+        }
+
+        // 4. Execute core logic
         $useCase = self::createUseCase();
         return $useCase->execute($event);
     }

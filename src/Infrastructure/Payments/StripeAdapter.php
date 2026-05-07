@@ -48,7 +48,7 @@ final class StripeAdapter implements PaymentGatewayInterface
             'payment_method_types' => ['card'],
             'line_items' => [[
                 'price_data' => [
-                    'currency' => strtolower($order->amount()->currency()->value),
+                    'currency' => strtolower($order->amount()->currency()->toString()),
                     'product_data' => [
                         'name' => 'Subscription',
                     ],
@@ -59,7 +59,7 @@ final class StripeAdapter implements PaymentGatewayInterface
             'mode' => 'payment', // Can be changed to 'subscription' if needed
             'client_reference_id' => $order->externalClientId(),
             'metadata' => [
-                'order_id' => $order->id()->toString(),
+                'order_id' => $order->id()->uuid(),
             ],
             'success_url' => $successUrl,
             'cancel_url' => $cancelUrl,
@@ -88,9 +88,9 @@ final class StripeAdapter implements PaymentGatewayInterface
             return false;
         }
 
-        $sigHeader = $headers['stripe-signature'] 
-                  ?? $headers['Stripe-Signature'] 
-                  ?? $headers['STRIPE-SIGNATURE'] 
+        $sigHeader = $headers['stripe-signature']
+                  ?? $headers['Stripe-Signature']
+                  ?? $headers['STRIPE-SIGNATURE']
                   ?? '';
 
         $rawBody = $headers['X-RAW-BODY'] ?? '';
@@ -196,6 +196,76 @@ final class StripeAdapter implements PaymentGatewayInterface
                 'status' => 'failed',
                 'error' => $e->getMessage()
             ];
+        }
+    }
+
+    /**
+     * Fetch the current status of a Stripe checkout session.
+     */
+    public function verifyTransaction(string $externalId): array
+    {
+        \Stripe\Stripe::setApiKey($this->secretKey);
+        
+        try {
+            $session = \Stripe\Checkout\Session::retrieve($externalId);
+            
+            if ($session->payment_status === 'paid') {
+                return [
+                    'action' => 'INITIAL_PAYMENT',
+                    'external_id' => $session->id,
+                    'external_subscription_id' => $session->subscription ?? $session->id,
+                    'external_transaction_id' => $session->payment_intent ?? $session->id,
+                    'amount' => $session->amount_total / 100,
+                    'currency' => strtoupper($session->currency),
+                    'external_client_id' => $session->client_reference_id,
+                    'internal_order_id' => $session->metadata->order_id ?? null,
+                    'raw_payload' => $session->toArray()
+                ];
+            }
+            
+            return [
+                'action' => 'IGNORED', 
+                'status' => $session->payment_status
+            ];
+        } catch (\Exception $e) {
+             return [
+                 'action' => 'FAILED', 
+                 'error' => $e->getMessage()
+             ];
+        }
+    }
+
+    public function cancelSubscription(string $externalId, bool $atPeriodEnd = true): array
+    {
+        $this->init();
+        try {
+            if ($atPeriodEnd) {
+                $sub = \Stripe\Subscription::update($externalId, [
+                    'cancel_at_period_end' => true
+                ]);
+            } else {
+                $sub = \Stripe\Subscription::retrieve($externalId);
+                $sub->cancel();
+            }
+
+            return ['status' => 'success'];
+        } catch (\Exception $e) {
+            return ['status' => 'failed', 'error' => $e->getMessage()];
+        }
+    }
+
+    public function pauseSubscription(string $externalId): array
+    {
+        $this->init();
+        try {
+            \Stripe\Subscription::update($externalId, [
+                'pause_collection' => [
+                    'behavior' => 'void'
+                ]
+            ]);
+            return ['status' => 'success'];
+        } catch (\Exception $e) {
+            return ['status' => 'failed', 'error' => $e->getMessage()];
         }
     }
 }

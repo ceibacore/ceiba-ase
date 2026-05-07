@@ -36,4 +36,27 @@ interface PaymentGatewayInterface
      *               ]
      */
     public function refund(string $externalTransactionId, float $amount, string $reason): array;
+
+    /**
+     * Fetch the current status of a transaction/checkout session from the provider.
+     * Useful as a fallback when webhooks are delayed or missing.
+     * 
+     * @param string $externalId The external session/transaction ID
+     * @return array Normalized event data (same format as parseWebhookEvent)
+     */
+    public function verifyTransaction(string $externalId): array;
+
+    /**
+     * Cancel an active subscription at the provider level.
+     * 
+     * @param string $externalId  The external subscription ID
+     * @param bool   $atPeriodEnd If true, cancel at the end of the current billing cycle
+     * @return array [status => success|failed, error => string|null]
+     */
+    public function cancelSubscription(string $externalId, bool $atPeriodEnd = true): array;
+
+    /**
+     * Pause a subscription at the provider level.
+     */
+    public function pauseSubscription(string $externalId): array;
 }
