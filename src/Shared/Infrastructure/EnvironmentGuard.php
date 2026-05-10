@@ -26,7 +26,7 @@ class EnvironmentGuard
             try {
                 self::loadFromEnvFile();
             } catch (\RuntimeException $e) {
-                fwrite(STDERR, "[ASE-DEBUG] Error: " . $e->getMessage() . "\n");
+                // Silently continue to throw missing vars error if loading fails
             }
             
             $missing = [];
@@ -52,6 +52,8 @@ class EnvironmentGuard
         $envFile = self::findEnvFileRecursive($startDir, 0);
         
         $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if ($lines === false) return;
+
         foreach ($lines as $line) {
             $line = trim($line);
             if (empty($line) || str_starts_with($line, '#')) continue;
@@ -74,19 +76,13 @@ class EnvironmentGuard
     private static function findEnvFileRecursive(string $currentDir, int $depth): string
     {
         $envPath = $currentDir . DIRECTORY_SEPARATOR . '.env';
-        $exists = file_exists($envPath);
-        $readable = is_readable($envPath);
-        $user = get_current_user();
-        $uid = getmyuid();
 
-        fwrite(STDERR, "[ASE-DEBUG] Checking: $envPath (Exists: " . ($exists ? 'Y' : 'N') . ", User: $user, UID: $uid)\n");
-
-        if ($exists) {
+        if (file_exists($envPath)) {
             return $envPath;
         }
 
         if ($depth >= 4) {
-            throw new \RuntimeException("Exceeded search depth (4 levels).");
+            throw new \RuntimeException("Could not find .env file within 4 levels.");
         }
 
         $parentDir = dirname($currentDir);
