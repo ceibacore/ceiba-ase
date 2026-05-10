@@ -22,12 +22,11 @@ class EnvironmentGuard
             }
         }
 
-        // If something is missing, try to load from .env file
         if (!empty($missing)) {
             try {
                 self::loadFromEnvFile();
             } catch (\RuntimeException $e) {
-                // If we can't find the .env file, we proceed to throw the final missing vars error
+                fwrite(STDERR, "[ASE-DEBUG] Error searching .env: " . $e->getMessage() . "\n");
             }
             
             $missing = [];
@@ -49,32 +48,28 @@ class EnvironmentGuard
 
     private static function loadFromEnvFile(): void
     {
-
-        $envFile = self::findEnvFileRecursive();
-
+        $startDir = dirname(__DIR__, 3); 
+        fwrite(STDERR, "[ASE-DEBUG] Starting search from: $startDir\n");
+        
+        $envFile = self::findEnvFileRecursive($startDir, 0);
+        fwrite(STDERR, "[ASE-DEBUG] Found .env at: $envFile\n");
+        
         $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         if ($lines === false) {
+            fwrite(STDERR, "[ASE-DEBUG] Could not read file lines.\n");
             return;
         }
 
         foreach ($lines as $line) {
             $line = trim($line);
-            if (empty($line) || str_starts_with($line, '#')) {
-                continue;
-            }
-
-            if (strpos($line, '=') === false) {
-                continue;
-            }
+            if (empty($line) || str_starts_with($line, '#')) continue;
+            if (strpos($line, '=') === false) continue;
 
             [$key, $value] = explode('=', $line, 2);
             $key = trim($key);
             $value = trim($value);
 
-            if (empty($key)) {
-                continue;
-            }
-
+            // Handle quotes
             if ((str_starts_with($value, '"') && str_ends_with($value, '"')) ||
                 (str_starts_with($value, "'") && str_ends_with($value, "'"))) {
                 $value = substr($value, 1, -1);
@@ -85,21 +80,22 @@ class EnvironmentGuard
         }
     }
 
-    private static function findEnvFileRecursive(string $currentDir = __DIR__, int $depth = 1): string
+    private static function findEnvFileRecursive(string $currentDir, int $depth): string
     {
-        $envPath = dirname(__DIR__, $depth) . DIRECTORY_SEPARATOR . '.env';
+        $envPath = $currentDir . DIRECTORY_SEPARATOR . '.env';
+        fwrite(STDERR, "[ASE-DEBUG] Checking: $envPath\n");
 
         if (file_exists($envPath) && is_readable($envPath)) {
             return $envPath;
         }
 
-        if ($depth >= 10) {
-            throw new \RuntimeException("Could not find a readable .env file within 10 levels of " . dirname(__DIR__, $depth));
+        if ($depth >= 4) {
+            throw new \RuntimeException("Exceeded search depth (4 levels).");
         }
 
         $parentDir = dirname($currentDir);
         if ($parentDir === $currentDir) {
-            throw new \RuntimeException("Reached filesystem root without finding .env file.");
+            throw new \RuntimeException("Reached root.");
         }
 
         return self::findEnvFileRecursive($parentDir, $depth + 1);
