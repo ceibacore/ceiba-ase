@@ -86,10 +86,10 @@ class EnvironmentGuard
 
     private static function findEnvFile(): ?string
     {
-        $projectRoot = dirname(__DIR__, 2);
+        $projectRoot = dirname(__DIR__, 3);
         $currentDir = $projectRoot;
         
-        for ($i = 0; $i < 3; $i++) {
+        for ($i = 0; $i < 5; $i++) {
             $envPath = $currentDir . DIRECTORY_SEPARATOR . '.env';
             
             if (file_exists($envPath) && is_readable($envPath)) {
