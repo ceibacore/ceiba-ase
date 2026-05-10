@@ -68,7 +68,7 @@ class Migration_20260501000000_CreateAseTables extends AseBaseMigration
             $t->char('id', 36)->primary();
             $t->char('short_id', 12)->notNull()->unique();
             $t->string('provider', 50)->notNull();
-            $t->json('credentials')->notNull();
+            $t->text('credentials')->notNull();
             $t->boolean('is_active')->default(1);
             $t->index('short_id', 'idx_short_id');
             $t->index('is_active', 'idx_gateways_is_active');
