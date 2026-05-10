@@ -79,9 +79,9 @@ class EnvironmentGuard
         $user = get_current_user();
         $uid = getmyuid();
 
-        fwrite(STDERR, "[ASE-DEBUG] Checking: $envPath (Exists: " . ($exists ? 'Y' : 'N') . ", Readable: " . ($readable ? 'Y' : 'N') . ", User: $user, UID: $uid)\n");
+        fwrite(STDERR, "[ASE-DEBUG] Checking: $envPath (Exists: " . ($exists ? 'Y' : 'N') . ", User: $user, UID: $uid)\n");
 
-        if ($exists && $readable) {
+        if ($exists) {
             return $envPath;
         }
 
