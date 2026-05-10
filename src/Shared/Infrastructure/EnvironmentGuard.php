@@ -85,7 +85,7 @@ class EnvironmentGuard
         }
     }
 
-    private static function findEnvFileRecursive(string $currentDir, int $depth): string
+    private static function findEnvFileRecursive(string $currentDir = __DIR__, int $depth = 1): string
     {
         $envPath = dirname(__DIR__, $depth) . DIRECTORY_SEPARATOR . '.env';
 
