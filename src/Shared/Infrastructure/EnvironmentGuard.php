@@ -49,9 +49,9 @@ class EnvironmentGuard
 
     private static function loadFromEnvFile(): void
     {
-        $startDir = dirname(__DIR__, 3); // Starts at lemur-ase/ root
-        $envFile = self::findEnvFileRecursive($startDir, 0);
-        
+
+        $envFile = self::findEnvFileRecursive();
+
         $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         if ($lines === false) {
             return;
@@ -87,14 +87,14 @@ class EnvironmentGuard
 
     private static function findEnvFileRecursive(string $currentDir, int $depth): string
     {
-        $envPath = $currentDir . DIRECTORY_SEPARATOR . '.env';
+        $envPath = dirname(__DIR__, $depth) . DIRECTORY_SEPARATOR . '.env';
 
         if (file_exists($envPath) && is_readable($envPath)) {
             return $envPath;
         }
 
-        if ($depth >= 4) {
-            throw new \RuntimeException("Could not find a readable .env file within 4 levels of " . dirname(__DIR__, 3));
+        if ($depth >= 10) {
+            throw new \RuntimeException("Could not find a readable .env file within 10 levels of " . dirname(__DIR__, $depth));
         }
 
         $parentDir = dirname($currentDir);
