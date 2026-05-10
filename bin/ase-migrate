@@ -81,7 +81,7 @@ $command  = $args[0] ?? null;
 $steps   = isset($opts['steps'])   ? (int) $opts['steps']   : null;
 $dryRun  = isset($opts['dry-run']);
 $confirm = isset($opts['confirm']);
-$migrationsPath = $opts['path'] ?? (__DIR__ . '/../migrations/php');
+$migrationsPath = $opts['path'] ?? (__DIR__ . '/../Migrations/php');
 
 // ── Help ─────────────────────────────────────────────────────────────────────
 
