@@ -22,8 +22,13 @@ class EnvironmentGuard
             }
         }
 
+        // If something is missing, try to load from .env file
         if (!empty($missing)) {
-            self::loadFromEnvFile();
+            try {
+                self::loadFromEnvFile();
+            } catch (\RuntimeException $e) {
+                // If we can't find the .env file, we proceed to throw the final missing vars error
+            }
             
             $missing = [];
             foreach (self::$requiredVars as $var) {
@@ -37,21 +42,17 @@ class EnvironmentGuard
             throw new \RuntimeException(
                 "Agnostic Subscription Engine (ASE) is missing required environment variables: " . 
                 implode(', ', $missing) . "\n" .
-                "Set the required environment variables before running migrations."
+                "Check your .env file or set them manually before running migrations."
             );
         }
     }
 
     private static function loadFromEnvFile(): void
     {
-        $envFile = self::findEnvFile();
+        $startDir = dirname(__DIR__, 3); // Starts at lemur-ase/ root
+        $envFile = self::findEnvFileRecursive($startDir, 0);
         
-        if (!$envFile || !file_exists($envFile)) {
-            return;
-        }
-
         $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        
         if ($lines === false) {
             return;
         }
@@ -84,28 +85,24 @@ class EnvironmentGuard
         }
     }
 
-    private static function findEnvFile(): ?string
+    private static function findEnvFileRecursive(string $currentDir, int $depth): string
     {
-        $projectRoot = dirname(__DIR__, 3);
-        $currentDir = $projectRoot;
-        
-        for ($i = 0; $i < 5; $i++) {
-            $envPath = $currentDir . DIRECTORY_SEPARATOR . '.env';
-            
-            if (file_exists($envPath) && is_readable($envPath)) {
-                return $envPath;
-            }
+        $envPath = $currentDir . DIRECTORY_SEPARATOR . '.env';
 
-            $parentDir = dirname($currentDir);
-            
-            if ($parentDir === $currentDir) {
-                break;
-            }
-
-            $currentDir = $parentDir;
+        if (file_exists($envPath) && is_readable($envPath)) {
+            return $envPath;
         }
 
-        return null;
+        if ($depth >= 4) {
+            throw new \RuntimeException("Could not find a readable .env file within 4 levels of " . dirname(__DIR__, 3));
+        }
+
+        $parentDir = dirname($currentDir);
+        if ($parentDir === $currentDir) {
+            throw new \RuntimeException("Reached filesystem root without finding .env file.");
+        }
+
+        return self::findEnvFileRecursive($parentDir, $depth + 1);
     }
 
     public static function get(string $key, $default = null)
