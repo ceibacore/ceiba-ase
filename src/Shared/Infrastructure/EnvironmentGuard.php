@@ -26,7 +26,7 @@ class EnvironmentGuard
             try {
                 self::loadFromEnvFile();
             } catch (\RuntimeException $e) {
-                fwrite(STDERR, "[ASE-DEBUG] Error searching .env: " . $e->getMessage() . "\n");
+                fwrite(STDERR, "[ASE-DEBUG] Error: " . $e->getMessage() . "\n");
             }
             
             $missing = [];
@@ -49,17 +49,9 @@ class EnvironmentGuard
     private static function loadFromEnvFile(): void
     {
         $startDir = dirname(__DIR__, 3); 
-        fwrite(STDERR, "[ASE-DEBUG] Starting search from: $startDir\n");
-        
         $envFile = self::findEnvFileRecursive($startDir, 0);
-        fwrite(STDERR, "[ASE-DEBUG] Found .env at: $envFile\n");
         
         $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        if ($lines === false) {
-            fwrite(STDERR, "[ASE-DEBUG] Could not read file lines.\n");
-            return;
-        }
-
         foreach ($lines as $line) {
             $line = trim($line);
             if (empty($line) || str_starts_with($line, '#')) continue;
@@ -69,7 +61,6 @@ class EnvironmentGuard
             $key = trim($key);
             $value = trim($value);
 
-            // Handle quotes
             if ((str_starts_with($value, '"') && str_ends_with($value, '"')) ||
                 (str_starts_with($value, "'") && str_ends_with($value, "'"))) {
                 $value = substr($value, 1, -1);
@@ -83,9 +74,14 @@ class EnvironmentGuard
     private static function findEnvFileRecursive(string $currentDir, int $depth): string
     {
         $envPath = $currentDir . DIRECTORY_SEPARATOR . '.env';
-        fwrite(STDERR, "[ASE-DEBUG] Checking: $envPath\n");
+        $exists = file_exists($envPath);
+        $readable = is_readable($envPath);
+        $user = get_current_user();
+        $uid = getmyuid();
 
-        if (file_exists($envPath) && is_readable($envPath)) {
+        fwrite(STDERR, "[ASE-DEBUG] Checking: $envPath (Exists: " . ($exists ? 'Y' : 'N') . ", Readable: " . ($readable ? 'Y' : 'N') . ", User: $user, UID: $uid)\n");
+
+        if ($exists && $readable) {
             return $envPath;
         }
 
