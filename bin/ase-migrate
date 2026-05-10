@@ -153,14 +153,14 @@ if ($command === 'make') {
 // ── Bootstrap DB for other commands ──────────────────────────────────────────
 
 try {
-    \LemurAse\Shared\EnvironmentGuard::check();
+    \LemurAse\Shared\Infrastructure\EnvironmentGuard::check();
 } catch (\RuntimeException $e) {
     fwrite(STDERR, ase_color("[ERROR] " . $e->getMessage() . "\n", 'red'));
     fwrite(STDERR, "Set the required environment variables before running migrations.\n");
     exit(1);
 }
 
-$db  = \LemurAse\Shared\LemurInstance::get();
+$db  = \LemurAse\Shared\Infrastructure\LemurInstance::get();
 $pdo = $db->pdo();
 
 $runner = new \LemurAse\Migration\AseMigrationRunner(
