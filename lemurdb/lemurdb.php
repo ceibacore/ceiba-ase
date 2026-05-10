@@ -201,7 +201,22 @@ class LemurQuery
     public function __construct(PDO $pdo, string $table, string $prefix = '')
     {
         $this->pdo = $pdo;
-        $this->table = $prefix . $table;
+        $this->table = $this->quoteIdentifier($prefix . $table);
+    }
+
+    /**
+     * Quote a SQL identifier (table or column name).
+     *
+     * @param string $identifier
+     * @return string
+     */
+    protected function quoteIdentifier(string $identifier): string
+    {
+        // Handle table.column format
+        if (strpos($identifier, '.') !== false) {
+            return implode('.', array_map([$this, 'quoteIdentifier'], explode('.', $identifier)));
+        }
+        return "`" . str_replace("`", "``", $identifier) . "`";
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -305,7 +320,8 @@ class LemurQuery
     public function where(array $conditions): static
     {
         foreach ($conditions as $column => $value) {
-            $this->addWhere("{$column} = ?", [$value], 'AND');
+            $quoted = $this->quoteIdentifier($column);
+            $this->addWhere("{$quoted} = ?", [$value], 'AND');
             $this->clauses['params'][] = $value;
         }
         return $this;
@@ -516,7 +532,7 @@ class LemurQuery
     private function buildInsertSql(array $rows): array
     {
         $columns = array_keys($rows[0]);
-        $columnList = implode(', ', $columns);
+        $columnList = implode(', ', array_map([$this, 'quoteIdentifier'], $columns));
         $placeholder = '(' . implode(', ', array_fill(0, count($columns), '?')) . ')';
         $valueSets = implode(', ', array_fill(0, count($rows), $placeholder));
 
@@ -556,7 +572,7 @@ class LemurQuery
         }
 
         $setClauses = array_map(
-            fn($col) => "{$col} = ?",
+            fn($col) => $this->quoteIdentifier($col) . " = ?",
             array_keys($data)
         );
 
