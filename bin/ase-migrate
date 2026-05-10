@@ -166,7 +166,7 @@ $pdo = $db->pdo();
 $runner = new \LemurAse\Migration\AseMigrationRunner(
     pdo:            $pdo,
     migrationsPath: $migrationsPath,
-    prefix:         (string) (\LemurAse\Shared\EnvironmentGuard::get('DB_PREFIX', 'ase_')),
+    prefix:         (string) (\LemurAse\Shared\Infrastructure\EnvironmentGuard::get('DB_PREFIX', 'ase_')),
     dryRun:         $dryRun
 );
 
