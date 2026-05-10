@@ -588,7 +588,7 @@ abstract class AbstractFormManager
 
     /**
      * Resolve the CSRF secret from environment variables.
-     * Priority: GATEWAY_CSRF_SECRET → ASE_SECRET_KEY
+     * Priority: GATEWAY_CSRF_SECRET → GATEWAY_SERVICE_SECRET
      *
      * @throws \RuntimeException if no secret is configured
      */
@@ -596,11 +596,11 @@ abstract class AbstractFormManager
     {
         $secret = (string) getenv('GATEWAY_CSRF_SECRET');
         if ($secret === '') {
-            $secret = (string) getenv('ASE_SECRET_KEY');
+            $secret = (string) getenv('GATEWAY_SERVICE_SECRET');
         }
         if ($secret === '') {
             throw new \RuntimeException(
-                'GATEWAY_CSRF_SECRET (or ASE_SECRET_KEY) environment variable is not set.'
+                'GATEWAY_CSRF_SECRET (or GATEWAY_SERVICE_SECRET) environment variable is not set.'
             );
         }
 

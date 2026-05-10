@@ -10,7 +10,7 @@ class EnvironmentGuard
         'DB_DATABASE',
         'DB_USERNAME',
         'DB_PASSWORD',
-        'ASE_SECRET_KEY'
+        'GATEWAY_SERVICE_SECRET'
     ];
 
     public static function check(): void

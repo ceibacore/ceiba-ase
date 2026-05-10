@@ -27,15 +27,15 @@
 
 ### ✅ Implemented Features (7 Production Gaps Closed)
 
-| Gap | Feature | Status | Details |
-|---|---|---|---|
-| #1 | Admin API | ✅ COMPLETE | Create/update plans, prices, gateways via `AseManager` static methods |
-| #2 | Multi-Gateway Credentials | ✅ COMPLETE | Database-driven credential system, supports Stripe + PayPal simultaneously |
-| #3 | Billing Period Calculator | ✅ COMPLETE | Flexible intervals: daily, monthly, quarterly, yearly with interval counts |
-| #4 | Trial Period Logic | ✅ COMPLETE | Trial → Active transition, trial invoices (zero-amount), grace periods |
-| #5 | Subscription Updated | ✅ COMPLETE | Handle `SUBSCRIPTION_UPDATED` events from gateways |
-| #6 | Refund Processing | ✅ COMPLETE | Full/partial refunds with ProcessRefund + IssueRefund use cases |
-| #7 | Webhook Signature Validation | ✅ COMPLETE | HMAC-SHA256 (Stripe) + RSA-SHA256 (PayPal), 5-min replay protection |
+| Gap | Feature                      | Status     | Details                                                                    |
+| --- | ---------------------------- | ---------- | -------------------------------------------------------------------------- |
+| #1  | Admin API                    | ✅ COMPLETE | Create/update plans, prices, gateways via `AseManager` static methods      |
+| #2  | Multi-Gateway Credentials    | ✅ COMPLETE | Database-driven credential system, supports Stripe + PayPal simultaneously |
+| #3  | Billing Period Calculator    | ✅ COMPLETE | Flexible intervals: daily, monthly, quarterly, yearly with interval counts |
+| #4  | Trial Period Logic           | ✅ COMPLETE | Trial → Active transition, trial invoices (zero-amount), grace periods     |
+| #5  | Subscription Updated         | ✅ COMPLETE | Handle `SUBSCRIPTION_UPDATED` events from gateways                         |
+| #6  | Refund Processing            | ✅ COMPLETE | Full/partial refunds with ProcessRefund + IssueRefund use cases            |
+| #7  | Webhook Signature Validation | ✅ COMPLETE | HMAC-SHA256 (Stripe) + RSA-SHA256 (PayPal), 5-min replay protection        |
 
 ---
 
@@ -667,13 +667,13 @@ class Migration_20260505000000_AddPaymentMethodColumn extends AseBaseMigration
 
 ## Performance Characteristics
 
-| Operation | Time | Notes |
-|---|---|---|
-| `getEnabledGateways()` | 0.5ms | Indexed on `is_active` column |
-| `createCheckoutSession()` | 10-50ms | Includes gateway API call |
-| `handleWebhook()` | 5-15ms | Atomic 4-table transaction |
-| `hasActiveAccess()` | 1-3ms | Cached subscription lookup |
-| `BillingPeriodCalculator::calculate()` | <1ms | Pure PHP, no DB calls |
+| Operation                              | Time    | Notes                         |
+| -------------------------------------- | ------- | ----------------------------- |
+| `getEnabledGateways()`                 | 0.5ms   | Indexed on `is_active` column |
+| `createCheckoutSession()`              | 10-50ms | Includes gateway API call     |
+| `handleWebhook()`                      | 5-15ms  | Atomic 4-table transaction    |
+| `hasActiveAccess()`                    | 1-3ms   | Cached subscription lookup    |
+| `BillingPeriodCalculator::calculate()` | <1ms    | Pure PHP, no DB calls         |
 
 ---
 
@@ -789,11 +789,11 @@ add_action('plugins_loaded', function() {
 
 All technical documents live in [`docs/`](docs/) and [`docs-ia/ase/`](../docs-ia/ase/):
 
-| Document | Purpose |
-|---|---|
-| [IMPLEMENTATION_REPORT.md](docs/IMPLEMENTATION_REPORT.md) | Gap closure verification, security audit, test coverage |
-| [01_admin_api_and_gateway_credentials.md](docs/production-gaps/01_admin_api_and_gateway_credentials.md) | Admin API design, credential architecture |
-| [02_billing_logic_and_security.md](docs/production-gaps/02_billing_logic_and_security.md) | Billing calculations, refund logic, webhook security |
+| Document                                                                                                | Purpose                                                 |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [IMPLEMENTATION_REPORT.md](docs/IMPLEMENTATION_REPORT.md)                                               | Gap closure verification, security audit, test coverage |
+| [01_admin_api_and_gateway_credentials.md](docs/production-gaps/01_admin_api_and_gateway_credentials.md) | Admin API design, credential architecture               |
+| [02_billing_logic_and_security.md](docs/production-gaps/02_billing_logic_and_security.md)               | Billing calculations, refund logic, webhook security    |
 
 ---
 
@@ -815,7 +815,7 @@ Add to `.env`:
 
 ```bash
 GATEWAY_ENCRYPTION_KEY=        # 32-byte base64 key (generate: php -r "echo base64_encode(random_bytes(32));")
-GATEWAY_CSRF_SECRET=            # HMAC secret (falls back to ASE_SECRET_KEY)
+GATEWAY_CSRF_SECRET=            # HMAC secret (falls back to GATEWAY_SERVICE_SECRET)
 ```
 ## Troubleshooting
 

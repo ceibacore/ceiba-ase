@@ -16,7 +16,7 @@ namespace LemurAse;
  *       'DB_USERNAME'   => 'db_user',
  *       'DB_PASSWORD'   => 'secret',
  *       'DB_PREFIX' => 'ase_',
- *       'ASE_SECRET_KEY'=> 'signing_secret',
+ *       'GATEWAY_SERVICE_SECRET'=> 'signing_secret',
  *   ]);
  */
 final class Ase

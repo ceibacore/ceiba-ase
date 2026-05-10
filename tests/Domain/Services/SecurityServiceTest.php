@@ -10,7 +10,7 @@ class SecurityServiceTest extends TestCase
 {
     protected function setUp(): void
     {
-        $_ENV['ASE_SECRET_KEY'] = 'test_secret_key_123';
+        $_ENV['GATEWAY_SERVICE_SECRET'] = 'test_secret_key_123';
     }
 
     public function testGenerateHashCreatesConsistentValidSignature()

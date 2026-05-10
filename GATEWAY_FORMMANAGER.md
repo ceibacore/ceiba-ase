@@ -208,6 +208,6 @@ No olvides declarar las variables requeridas en el archivo `.env` de Laravel par
 # Clave AES-256 de 32-bytes en Base64 para cifrar las credenciales de Stripe/PayPal
 GATEWAY_ENCRYPTION_KEY=your_base64_encryption_key
 
-# Usado para el HMAC del Token CSRF (Si se omite usa ASE_SECRET_KEY)
+# Usado para el HMAC del Token CSRF (Si se omite usa GATEWAY_SERVICE_SECRET)
 GATEWAY_CSRF_SECRET=your_csrf_secret
 ```

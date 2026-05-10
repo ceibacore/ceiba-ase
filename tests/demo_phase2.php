@@ -22,7 +22,7 @@ $_ENV['DB_PORT'] = '3306';
 $_ENV['DB_DATABASE'] = 'lemur_test';
 $_ENV['DB_USERNAME'] = 'root';
 $_ENV['DB_PASSWORD'] = '';
-$_ENV['ASE_SECRET_KEY'] = 'secret_key_123';
+$_ENV['GATEWAY_SERVICE_SECRET'] = 'secret_key_123';
 
 echo "--- Agnostic Subscription Engine (ASE) Phase 2 Demo ---\n";
 

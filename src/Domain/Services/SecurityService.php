@@ -10,7 +10,7 @@ final class SecurityService
 
     public function __construct()
     {
-        $this->secretKey = EnvironmentGuard::get('ASE_SECRET_KEY');
+        $this->secretKey = EnvironmentGuard::get('GATEWAY_SERVICE_SECRET');
     }
 
     public function generateHash(array $data): string
