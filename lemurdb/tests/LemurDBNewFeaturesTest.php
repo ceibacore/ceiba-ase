@@ -172,7 +172,7 @@ test(
 
 test(
     'SELECT respeta columnas con alias de tabla',
-    str_contains($sql, 'SELECT orders.id, users.name FROM orders'),
+    str_contains($sql, 'SELECT orders.id, users.name FROM `orders`'),
     "SQL: {$sql}"
 );
 
@@ -240,7 +240,7 @@ test(
 
 test(
     'WHERE se aplica después de los JOINs',
-    str_contains($sql, 'WHERE ase_subscriptions.status = ?'),
+    str_contains($sql, 'WHERE `ase_subscriptions`.`status` = ?'),
     "SQL: {$sql}"
 );
 
@@ -269,7 +269,7 @@ $sql = $q->toSql();
 
 test(
     'Prefix aplica en FROM pero no en JOIN (ON es responsabilidad del dev)',
-    str_contains($sql, 'FROM app_orders'),
+    str_contains($sql, 'FROM `app_orders`'),
     "SQL: {$sql}"
 );
 
@@ -342,7 +342,7 @@ $sql = $q->toSql();
 test(
     'JOIN + where() + whereRaw() combinados (caso real: expirar órdenes)',
     str_contains($sql, 'INNER JOIN ase_plan_prices')
-    && str_contains($sql, "ase_orders.status = ?")
+    && str_contains($sql, "`ase_orders`.`status` = ?")
     && str_contains($sql, 'AND ase_orders.expires_at < NOW()'),
     "SQL: {$sql}"
 );

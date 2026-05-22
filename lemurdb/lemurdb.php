@@ -14,6 +14,7 @@
  *   - whereRaw()     : Raw WHERE condition with bound params.
  *   - toJoinSql()    : Debug helper — renders JOIN clauses.
  */
+if (!class_exists('LemurDB')) {
 class LemurDB
 {
     /**
@@ -153,6 +154,7 @@ class LemurDB
         return $this->pdo;
     }
 }
+}
 
 
 /**
@@ -160,6 +162,7 @@ class LemurDB
  *
  * Fluent query builder for SELECT, INSERT, UPDATE, and DELETE.
  */
+if (!class_exists('LemurQuery')) {
 class LemurQuery
 {
     /**
@@ -762,4 +765,5 @@ class LemurQuery
         }
         return implode('', $parts);
     }
+}
 }
