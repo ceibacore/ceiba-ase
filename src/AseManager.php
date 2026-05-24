@@ -794,7 +794,8 @@ final class AseManager
             $manager->subscriptionRepo,
             $manager->invoiceRepo,
             $manager->logRepo,
-            $manager->planPriceRepo
+            $manager->planPriceRepo,
+            $manager->planRepo
         );
 
         return $useCase->execute($event);

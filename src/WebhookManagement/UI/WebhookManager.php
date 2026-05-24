@@ -54,7 +54,8 @@ final class WebhookManager
             $ase->subscriptionRepo,
             $ase->invoiceRepo,
             $ase->logRepo,
-            $ase->planPriceRepo
+            $ase->planPriceRepo,
+            $ase->planRepo
         );
     }
 

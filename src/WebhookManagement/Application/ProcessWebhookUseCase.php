@@ -10,10 +10,12 @@ use LemurAse\Domain\Repositories\SubscriptionRepositoryInterface;
 use LemurAse\Domain\Repositories\InvoiceRepositoryInterface;
 use LemurAse\Domain\Repositories\TransactionLogRepositoryInterface;
 use LemurAse\Domain\Repositories\PlanPriceRepositoryInterface;
+use LemurAse\Domain\Repositories\PlanRepositoryInterface;
 use LemurAse\Domain\Services\BillingPeriodCalculator;
 use LemurAse\Shared\Infrastructure\LemurInstance;
 use LemurAse\WebhookManagement\Domain\WebhookEvent;
 use LemurAse\Application\UseCases\ProcessRefund;
+use LemurAse\Infrastructure\Events\AseEventDispatcher;
 
 final class ProcessWebhookUseCase
 {
@@ -22,7 +24,8 @@ final class ProcessWebhookUseCase
         private readonly SubscriptionRepositoryInterface $subRepo,
         private readonly InvoiceRepositoryInterface $invoiceRepo,
         private readonly TransactionLogRepositoryInterface $logRepo,
-        private readonly PlanPriceRepositoryInterface $planPriceRepo
+        private readonly PlanPriceRepositoryInterface $planPriceRepo,
+        private readonly PlanRepositoryInterface $planRepo
     ) {}
 
     public function execute(WebhookEvent $event): bool
@@ -69,6 +72,10 @@ final class ProcessWebhookUseCase
         $planPrice = $this->planPriceRepo->findById($order->planPriceId());
         if (!$planPrice) throw new \Exception("PlanPrice not found.");
 
+        $plan = $this->planRepo->findById($planPrice->planId());
+        if (!$plan) throw new \Exception("Plan not found.");
+        $planSlug = $plan->slug();
+
         $order->markAsPaid();
         $this->orderRepo->save($order);
 
@@ -95,7 +102,13 @@ final class ProcessWebhookUseCase
 
         $this->createInvoice($order, $subId, $data['amount'], ($status === 'trialing' ? 'draft' : 'paid'), $periodStart, $periodEnd);
         
-        // Dispatch via Shared Event Bus (to be implemented/unified)
+        // Dispatch event for host application
+        AseEventDispatcher::dispatch('subscription.activated', [
+            'external_client_id' => $order->externalClientId(),
+            'subscription_id'    => $subId->uuid(),
+            'plan_slug'          => $planSlug,
+            'expires_at'         => $periodEnd,
+        ]);
     }
 
     private function handleRenewal(array $data): void
@@ -116,6 +129,11 @@ final class ProcessWebhookUseCase
 
         $order = $this->orderRepo->findById($subscription->orderId());
         $this->createInvoice($order, $subscription->id(), $data['amount'], 'paid', $newStart, $newEnd);
+
+        AseEventDispatcher::dispatch('subscription.renewed', [
+            'subscription_id' => $subscription->id()->uuid(),
+            'expires_at'      => $newEnd,
+        ]);
     }
 
     private function handlePaymentFailed(array $data): void
@@ -144,6 +162,11 @@ final class ProcessWebhookUseCase
             new \DateTimeImmutable(), $subscription->externalSubscriptionId()
         );
         $this->subRepo->save($updatedSub);
+
+        AseEventDispatcher::dispatch('subscription.canceled', [
+            'subscription_id' => $subscription->id()->uuid(),
+            'immediate'       => true,
+        ]);
     }
 
     private function handleSubscriptionUpdated(array $data): void
@@ -170,6 +193,13 @@ final class ProcessWebhookUseCase
         );
 
         $this->subRepo->save($updated);
+
+        if ($newStatus === 'canceled') {
+            AseEventDispatcher::dispatch('subscription.canceled', [
+                'subscription_id' => $subscription->id()->uuid(),
+                'immediate'       => false,
+            ]);
+        }
     }
 
     private function handleRefund(array $data): void
