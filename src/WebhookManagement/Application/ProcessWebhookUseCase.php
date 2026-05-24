@@ -11,6 +11,7 @@ use LemurAse\Domain\Repositories\InvoiceRepositoryInterface;
 use LemurAse\Domain\Repositories\TransactionLogRepositoryInterface;
 use LemurAse\Domain\Repositories\PlanPriceRepositoryInterface;
 use LemurAse\Domain\Repositories\PlanRepositoryInterface;
+use LemurAse\Domain\Repositories\GatewayRepositoryInterface;
 use LemurAse\Domain\Services\BillingPeriodCalculator;
 use LemurAse\Shared\Infrastructure\LemurInstance;
 use LemurAse\WebhookManagement\Domain\WebhookEvent;
@@ -25,7 +26,8 @@ final class ProcessWebhookUseCase
         private readonly InvoiceRepositoryInterface $invoiceRepo,
         private readonly TransactionLogRepositoryInterface $logRepo,
         private readonly PlanPriceRepositoryInterface $planPriceRepo,
-        private readonly PlanRepositoryInterface $planRepo
+        private readonly PlanRepositoryInterface $planRepo,
+        private readonly GatewayRepositoryInterface $gatewayRepo
     ) {}
 
     public function execute(WebhookEvent $event): bool
@@ -221,12 +223,49 @@ final class ProcessWebhookUseCase
 
     private function createInvoice($order, $subId, float $amount, string $status, $start, $end): void
     {
+        $planSnapshot = null;
+        try {
+            $planPrice = $this->planPriceRepo->findById($order->planPriceId());
+            if ($planPrice) {
+                $plan = $this->planRepo->findById($planPrice->planId());
+                $gateway = $this->gatewayRepo->findById($order->gatewayId());
+                
+                if ($plan) {
+                    $planSnapshot = [
+                        'plan' => [
+                            'id' => $plan->id()->uuid(),
+                            'name' => $plan->name(),
+                            'slug' => $plan->slug(),
+                            'description' => $plan->description(),
+                            'metadata' => $plan->metadata(),
+                        ],
+                        'price' => [
+                            'id' => $planPrice->id()->uuid(),
+                            'amount' => $planPrice->price()->amount(),
+                            'currency' => $planPrice->price()->currency()->toString(),
+                            'type' => $planPrice->type(),
+                            'interval' => $planPrice->interval(),
+                            'interval_count' => $planPrice->intervalCount(),
+                            'trial_days' => $planPrice->trialDays(),
+                        ],
+                        'gateway' => [
+                            'id' => $order->gatewayId()->uuid(),
+                            'provider' => $gateway ? $gateway->provider() : 'unknown',
+                        ]
+                    ];
+                }
+            }
+        } catch (\Throwable $e) {
+            // Silently fallback if snapshot fails to build
+        }
+
         $invoiceNumber = $this->invoiceRepo->getNextInvoiceNumber($order->externalClientId());
         $invoice = new Invoice(
             EntityId::generate(), $order->id(), $order->externalClientId(),
             $invoiceNumber, $order->amount(), $status, $subId, $amount, 0,
             $start, $end, ($status === 'paid' ? new \DateTimeImmutable() : null),
-            null, ($status === 'paid' ? new \DateTimeImmutable() : null)
+            null, ($status === 'paid' ? new \DateTimeImmutable() : null),
+            $planSnapshot
         );
         $this->invoiceRepo->save($invoice);
     }

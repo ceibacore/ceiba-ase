@@ -21,7 +21,8 @@ final class Invoice extends AggregateRoot
         private ?\DateTimeImmutable $periodEnd = null,
         private ?\DateTimeImmutable $issuedAt = null,
         private ?\DateTimeImmutable $dueAt = null,
-        private ?\DateTimeImmutable $paidAt = null
+        private ?\DateTimeImmutable $paidAt = null,
+        private ?array $planSnapshot = null
     ) {
         parent::__construct($id);
     }
@@ -39,4 +40,5 @@ final class Invoice extends AggregateRoot
     public function issuedAt(): ?\DateTimeImmutable { return $this->issuedAt; }
     public function dueAt(): ?\DateTimeImmutable { return $this->dueAt; }
     public function paidAt(): ?\DateTimeImmutable { return $this->paidAt; }
+    public function planSnapshot(): ?array { return $this->planSnapshot; }
 }

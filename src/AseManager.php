@@ -178,6 +178,38 @@ final class AseManager
 
         $result = [];
         foreach (array_slice($invoices, 0, $limit) as $inv) {
+            $planName = 'Plan Personalizado';
+            $provider = 'unknown';
+            $description = 'Pago de Suscripción';
+            $snapshot = $inv->planSnapshot();
+
+            if (!empty($snapshot)) {
+                $planName = $snapshot['plan']['name'] ?? $planName;
+                $provider = $snapshot['gateway']['provider'] ?? $provider;
+                $description = $snapshot['plan']['description'] ?? $description;
+            } else {
+                // Fallback en caliente para facturas históricas sin snapshot
+                try {
+                    $order = $manager->orderRepo->findById($inv->orderId());
+                    if ($order) {
+                        $planPrice = $manager->planPriceRepo->findById($order->planPriceId());
+                        if ($planPrice) {
+                            $plan = $manager->planRepo->findById($planPrice->planId());
+                            if ($plan) {
+                                $planName = $plan->name();
+                                $description = $plan->description() ?? $description;
+                            }
+                        }
+                        $gateway = $manager->gatewayRepo->findById($order->gatewayId());
+                        if ($gateway) {
+                            $provider = $gateway->provider();
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    // Ignorar errores de fallback y usar predeterminados
+                }
+            }
+
             $result[] = [
                 'id' => $inv->id()->uuid(),
                 'order_id' => $inv->orderId()->uuid(),
@@ -194,7 +226,11 @@ final class AseManager
                 'status' => $inv->status(),
                 'issued_at' => $inv->issuedAt()?->format('Y-m-d H:i:s'),
                 'due_at' => $inv->dueAt()?->format('Y-m-d H:i:s'),
-                'paid_at' => $inv->paidAt()?->format('Y-m-d H:i:s')
+                'paid_at' => $inv->paidAt()?->format('Y-m-d H:i:s'),
+                'plan_name' => $planName,
+                'provider' => $provider,
+                'description' => $description,
+                'plan_snapshot' => $snapshot
             ];
         }
 
@@ -795,7 +831,8 @@ final class AseManager
             $manager->invoiceRepo,
             $manager->logRepo,
             $manager->planPriceRepo,
-            $manager->planRepo
+            $manager->planRepo,
+            $manager->gatewayRepo
         );
 
         return $useCase->execute($event);

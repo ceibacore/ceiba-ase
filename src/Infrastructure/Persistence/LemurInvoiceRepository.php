@@ -31,6 +31,7 @@ final class LemurInvoiceRepository implements InvoiceRepositoryInterface
             'issued_at' => $invoice->issuedAt()?->format('Y-m-d H:i:s'),
             'due_at' => $invoice->dueAt()?->format('Y-m-d H:i:s'),
             'paid_at' => $invoice->paidAt()?->format('Y-m-d H:i:s'),
+            'plan_snapshot' => $invoice->planSnapshot() ? json_encode($invoice->planSnapshot()) : null,
         ];
 
         $db->query(TableNames::INVOICES)->insert($data);
@@ -87,7 +88,8 @@ final class LemurInvoiceRepository implements InvoiceRepositoryInterface
             $row['period_end'] ? new \DateTimeImmutable($row['period_end']) : null,
             $row['issued_at'] ? new \DateTimeImmutable($row['issued_at']) : null,
             $row['due_at'] ? new \DateTimeImmutable($row['due_at']) : null,
-            $row['paid_at'] ? new \DateTimeImmutable($row['paid_at']) : null
+            $row['paid_at'] ? new \DateTimeImmutable($row['paid_at']) : null,
+            (!empty($row['plan_snapshot'])) ? json_decode($row['plan_snapshot'], true) : null
         );
     }
 }

@@ -29,7 +29,7 @@ class PayPalAdapterTest extends TestCase
 
         $order = $this->createMockOrder();
 
-        $result = $adapter->createCheckoutSession($order);
+        $result = $adapter->createCheckoutSession($order, 'https://example.com/success', 'https://example.com/cancel');
 
         $this->assertIsArray($result);
         $this->assertArrayHasKey('checkout_url', $result);
@@ -52,7 +52,7 @@ class PayPalAdapterTest extends TestCase
 
         $order = $this->createMockOrder();
 
-        $result = $adapter->createCheckoutSession($order);
+        $result = $adapter->createCheckoutSession($order, 'https://example.com/success', 'https://example.com/cancel');
 
         $this->assertIsArray($result);
         $this->assertArrayHasKey('checkout_url', $result);

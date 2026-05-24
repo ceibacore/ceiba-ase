@@ -28,7 +28,7 @@ class StripeAdapterTest extends TestCase
 
         $order = $this->createMockOrder(true); // true = has trial days
 
-        $result = $adapter->createCheckoutSession($order);
+        $result = $adapter->createCheckoutSession($order, 'https://example.com/success', 'https://example.com/cancel');
 
         $this->assertIsArray($result);
         $this->assertArrayHasKey('checkout_url', $result);
@@ -50,7 +50,7 @@ class StripeAdapterTest extends TestCase
 
         $order = $this->createMockOrder(false); // false = no trial days
 
-        $result = $adapter->createCheckoutSession($order);
+        $result = $adapter->createCheckoutSession($order, 'https://example.com/success', 'https://example.com/cancel');
 
         $this->assertIsArray($result);
         $this->assertArrayHasKey('checkout_url', $result);
