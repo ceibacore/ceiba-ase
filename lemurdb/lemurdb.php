@@ -62,7 +62,7 @@ class LemurDB
                 PDO::ATTR_EMULATE_PREPARES => false,
             ]);
         } catch (PDOException $e) {
-            die("Connection Error: " . $e->getMessage());
+            throw new \RuntimeException("Connection Error: " . $e->getMessage(), 0, $e);
         }
     }
 
@@ -88,6 +88,9 @@ class LemurDB
      */
     private function buildDsn(array $c): string
     {
+        if (isset($c['driver']) && $c['driver'] === 'sqlite') {
+            return "sqlite:" . $c['db'];
+        }
         return "{$c['driver']}:host={$c['host']};port={$c['port']};dbname={$c['db']};charset=utf8mb4";
     }
 
