@@ -15,25 +15,24 @@ class EnvironmentGuard
 
     public static function check(): void
     {
-        $missing = [];
-        foreach (self::$requiredVars as $var) {
-            if (!isset($_ENV[$var]) && !getenv($var)) {
-                $missing[] = $var;
-            }
-        }
+        // Si ya hay configuración de BD seteada en el entorno (estilo Laravel),
+        // evitamos cargar el archivo .env para no sobreescribirla con valores locales obsoletos.
+        $hasAseConfig = (isset($_ENV['DB_HOST']) || getenv('DB_HOST')) &&
+            (isset($_ENV['DB_PORT']) || getenv('DB_PORT')) &&
+            (isset($_ENV['DB_DATABASE']) || getenv('DB_DATABASE'));
 
-        if (!empty($missing)) {
+        if (!$hasAseConfig) {
             try {
                 self::loadFromEnvFile();
             } catch (\RuntimeException $e) {
                 // Silently continue to throw missing vars error if loading fails
             }
-            
-            $missing = [];
-            foreach (self::$requiredVars as $var) {
-                if (!isset($_ENV[$var]) && !getenv($var)) {
-                    $missing[] = $var;
-                }
+        }
+
+        $missing = [];
+        foreach (self::$requiredVars as $var) {
+            if (!isset($_ENV[$var]) && !getenv($var)) {
+                $missing[] = $var;
             }
         }
 
