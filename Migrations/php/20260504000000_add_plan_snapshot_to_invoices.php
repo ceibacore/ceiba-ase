@@ -16,15 +16,14 @@ class Migration_20260504000000_AddPlanSnapshotToInvoices extends AseBaseMigratio
 
     public function up(): void
     {
-        $this->schema->statement(
-            'ALTER TABLE `ase_invoices` ADD COLUMN `plan_snapshot` JSON DEFAULT NULL COMMENT "Plan and price point-in-time details"'
-        );
+        $this->schema->addColumn('invoices', 'plan_snapshot', 'JSON', [
+            'nullable' => true,
+            'default'  => null,
+        ]);
     }
 
     public function down(): void
     {
-        $this->schema->statement(
-            'ALTER TABLE `ase_invoices` DROP COLUMN `plan_snapshot`'
-        );
+        $this->schema->dropColumn('invoices', 'plan_snapshot');
     }
 }

@@ -16,15 +16,14 @@ class Migration_20260503000000_AddMetadataToPlans extends AseBaseMigration
 
     public function up(): void
     {
-        $this->schema->statement(
-            'ALTER TABLE `ase_plans` ADD COLUMN `metadata` JSON DEFAULT NULL COMMENT "Plan metadata"'
-        );
+        $this->schema->addColumn('plans', 'metadata', 'JSON', [
+            'nullable' => true,
+            'default'  => null,
+        ]);
     }
 
     public function down(): void
     {
-        $this->schema->statement(
-            'ALTER TABLE `ase_plans` DROP COLUMN `metadata`'
-        );
+        $this->schema->dropColumn('plans', 'metadata');
     }
 }
