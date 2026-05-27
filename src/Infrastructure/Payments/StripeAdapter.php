@@ -44,7 +44,38 @@ final class StripeAdapter implements PaymentGatewayInterface
             $successUrl .= $separator . 'session_id={CHECKOUT_SESSION_ID}';
         }
 
-        $session = \Stripe\Checkout\Session::create([
+        $userId = $order->externalClientId();
+        $stripeCustomerId = \LemurAse\AseManager::getGatewayCustomerId($userId, 'stripe');
+
+        if (!$stripeCustomerId && class_exists('App\Models\User')) {
+            $user = \App\Models\User::find($userId);
+            if ($user) {
+                try {
+                    // 1. Search Stripe for existing customer with this email
+                    $search = \Stripe\Customer::search([
+                        'query' => "email:'" . $user->email . "'",
+                    ]);
+                    if (!empty($search->data)) {
+                        $stripeCustomerId = $search->data[0]->id;
+                    } else {
+                        // 2. Create customer if not found
+                        $customer = \Stripe\Customer::create([
+                            'email' => $user->email,
+                            'name' => trim(($user->name ?? '') . ' ' . ($user->last_name ?? '')),
+                            'metadata' => [
+                                'user_id' => $userId,
+                            ],
+                        ]);
+                        $stripeCustomerId = $customer->id;
+                    }
+                    \LemurAse\AseManager::saveGatewayCustomerId($userId, 'stripe', $stripeCustomerId);
+                } catch (\Exception $e) {
+                    error_log("Stripe customer creation/lookup failed: " . $e->getMessage());
+                }
+            }
+        }
+
+        $sessionParams = [
             'payment_method_types' => ['card'],
             'line_items' => [[
                 'price_data' => [
@@ -63,7 +94,13 @@ final class StripeAdapter implements PaymentGatewayInterface
             ],
             'success_url' => $successUrl,
             'cancel_url' => $cancelUrl,
-        ]);
+        ];
+
+        if ($stripeCustomerId) {
+            $sessionParams['customer'] = $stripeCustomerId;
+        }
+
+        $session = \Stripe\Checkout\Session::create($sessionParams);
 
         return [
             'checkout_url' => $session->url,

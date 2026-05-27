@@ -12,6 +12,7 @@ final class TableNames
     public const SUBSCRIPTIONS = 'subscriptions';
     public const INVOICES = 'invoices';
     public const TRANSACTIONS_LOG = 'transactions_log';
+    public const CUSTOMERS = 'customers';
 
     public static function all(): array
     {

@@ -837,4 +837,42 @@ final class AseManager
 
         return $useCase->execute($event);
     }
+
+    /**
+     * Get the mapped gateway customer ID for a client.
+     */
+    public static function getGatewayCustomerId(string $clientId, string $provider): ?string
+    {
+        $row = \LemurAse\Shared\Infrastructure\LemurInstance::get()
+            ->query(\LemurAse\Infrastructure\Persistence\TableNames::CUSTOMERS)
+            ->where(['client_id' => $clientId, 'gateway_provider' => $provider])
+            ->first();
+
+        return $row ? $row['gateway_customer_id'] : null;
+    }
+
+    /**
+     * Save the mapped gateway customer ID for a client.
+     */
+    public static function saveGatewayCustomerId(string $clientId, string $provider, string $gatewayCustomerId): void
+    {
+        $db = \LemurAse\Shared\Infrastructure\LemurInstance::get();
+        $existing = self::getGatewayCustomerId($clientId, $provider);
+
+        $data = [
+            'client_id' => $clientId,
+            'gateway_provider' => $provider,
+            'gateway_customer_id' => $gatewayCustomerId,
+            'updated_at' => (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+        ];
+
+        if ($existing !== null) {
+            $db->query(\LemurAse\Infrastructure\Persistence\TableNames::CUSTOMERS)
+                ->where(['client_id' => $clientId, 'gateway_provider' => $provider])
+                ->update($data);
+        } else {
+            $data['created_at'] = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
+            $db->query(\LemurAse\Infrastructure\Persistence\TableNames::CUSTOMERS)->insert($data);
+        }
+    }
 }
