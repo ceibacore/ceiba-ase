@@ -18,16 +18,30 @@ if (!class_exists('LemurDB')) {
 class LemurDB
 {
     /**
-     * Singleton instance.
+     * Array of singleton instances keyed by prefix/config hash.
+     *
+     * @var array
+     */
+    private static $instances = [];
+
+    /**
+     * Singleton instance (fallback/default for setInstance compatibility).
      *
      * @var LemurDB|null
      */
     private static $instance = null;
 
     /**
+     * Flag indicating if a manual mock/setInstance was applied.
+     *
+     * @var bool
+     */
+    private static $isMocked = false;
+
+    /**
      * Active PDO connection.
      *
-     * @var PDO
+     * @var PDO|callable
      */
     private $pdo;
 
@@ -56,7 +70,7 @@ class LemurDB
         $dsn = $this->buildDsn($config);
 
         try {
-            $this->pdo = new PDO($dsn, $config['username'], $config['password'], [
+            $this->pdo = new PDO($dsn, $config['username'] ?? '', $config['password'] ?? '', [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES => false,
@@ -74,10 +88,21 @@ class LemurDB
      */
     public static function getInstance(array $config = []): self
     {
-        if (self::$instance === null) {
-            self::$instance = new self($config);
+        // If a manual mock has been set (typically in SQLite tests), always return it.
+        // Also fallback to it if called with empty config.
+        if (self::$instance !== null && (self::$isMocked || empty($config))) {
+            return self::$instance;
         }
-        return self::$instance;
+
+        $key = md5(serialize($config));
+        if (!isset(self::$instances[$key])) {
+            $db = new self($config);
+            self::$instances[$key] = $db;
+            if (self::$instance === null) {
+                self::$instance = $db;
+            }
+        }
+        return self::$instances[$key];
     }
 
     /**
@@ -97,6 +122,7 @@ class LemurDB
         ], $config));
         $db->pdo = $pdo;
         self::$instance = $db;
+        self::$isMocked = true; // Mark as mocked to skip multi-instance resolution in tests
     }
 
     /**
