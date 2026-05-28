@@ -45,4 +45,12 @@ final class Ase
     {
         return AseManager::getInstance();
     }
+
+    /**
+     * Reset the AseManager singleton instance.
+     */
+    public static function reset(): void
+    {
+        AseManager::reset();
+    }
 }

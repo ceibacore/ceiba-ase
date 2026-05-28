@@ -91,6 +91,14 @@ final class AseManager
     }
 
     /**
+     * Reset the singleton instance.
+     */
+    public static function reset(): void
+    {
+        self::$instance = null;
+    }
+
+    /**
      * Initialize a checkout session.
      */
     public static function createCheckoutSession(string $clientId, string $planPriceId, string $gatewayId, string $successUrl, string $cancelUrl): string
