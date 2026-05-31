@@ -5,23 +5,28 @@ namespace LemurAse\Shared\Infrastructure;
 class EnvironmentGuard
 {
     private static array $requiredVars = [
-        'DB_HOST',
-        'DB_PORT',
-        'DB_DATABASE',
-        'DB_USERNAME',
-        'DB_PASSWORD',
-        'GATEWAY_SERVICE_SECRET'
+        'ASE_DB_HOST',
+        'ASE_DB_PORT',
+        'ASE_DB_DATABASE',
+        'ASE_DB_USERNAME',
+        'ASE_DB_PASSWORD',
+        'ASE_DB_PREFIX',
+        'GATEWAY_SERVICE_SECRET',
     ];
 
     public static function check(): void
     {
-        // Si ya hay configuración de BD seteada en el entorno (estilo Laravel),
-        // evitamos cargar el archivo .env para no sobreescribirla con valores locales obsoletos.
-        $hasAseConfig = (isset($_ENV['DB_HOST']) || getenv('DB_HOST')) &&
+        // Preferimos configuración namespaced ASE_DB_* para evitar colisión con CMS/DB_*.
+        $hasNamespacedAseConfig = (isset($_ENV['ASE_DB_HOST']) || getenv('ASE_DB_HOST')) &&
+            (isset($_ENV['ASE_DB_PORT']) || getenv('ASE_DB_PORT')) &&
+            (isset($_ENV['ASE_DB_DATABASE']) || getenv('ASE_DB_DATABASE'));
+
+        // Fallback legacy para entornos antiguos.
+        $hasLegacyDbConfig = (isset($_ENV['DB_HOST']) || getenv('DB_HOST')) &&
             (isset($_ENV['DB_PORT']) || getenv('DB_PORT')) &&
             (isset($_ENV['DB_DATABASE']) || getenv('DB_DATABASE'));
 
-        if (!$hasAseConfig) {
+        if (!$hasNamespacedAseConfig && !$hasLegacyDbConfig) {
             try {
                 self::loadFromEnvFile();
             } catch (\RuntimeException $e) {
@@ -36,9 +41,21 @@ class EnvironmentGuard
             }
         }
 
+        // Permitir ejecución en instalaciones legacy donde solo existen DB_*.
+        if (!empty($missing) && $hasLegacyDbConfig) {
+            $missing = array_diff($missing, [
+                'ASE_DB_HOST',
+                'ASE_DB_PORT',
+                'ASE_DB_DATABASE',
+                'ASE_DB_USERNAME',
+                'ASE_DB_PASSWORD',
+                'ASE_DB_PREFIX',
+            ]);
+        }
+
         if (!empty($missing)) {
             throw new \RuntimeException(
-                "Agnostic Subscription Engine (ASE) is missing required environment variables: " . 
+                "Agnostic Subscription Engine (ASE) is missing required environment variables: " .
                 implode(', ', $missing) . "\n" .
                 "Check your .env file or set them manually before running migrations."
             );
