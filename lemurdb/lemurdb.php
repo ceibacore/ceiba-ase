@@ -173,10 +173,14 @@ if (!class_exists('LemurDB')) {
          */
         private function buildDsn(array $c): string
         {
-            if (isset($c['driver']) && $c['driver'] === 'sqlite') {
+            $driver = $c['driver'] ?? 'mysql';
+            if ($driver === 'mariadb') {
+                $driver = 'mysql';
+            }
+            if ($driver === 'sqlite') {
                 return "sqlite:" . $c['db'];
             }
-            return "{$c['driver']}:host={$c['host']};port={$c['port']};dbname={$c['db']};charset=utf8mb4";
+            return "{$driver}:host={$c['host']};port={$c['port']};dbname={$c['db']};charset=utf8mb4";
         }
 
         /**
