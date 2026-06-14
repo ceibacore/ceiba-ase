@@ -145,13 +145,16 @@ final class AseManager
     public static function getClientActiveSubscription(string $clientId): ?array
     {
         $manager = self::getInstance();
-        $subs = $manager->subscriptionRepo->findByClientAndStatus($clientId, 'active');
+        $subs = array_merge(
+            $manager->subscriptionRepo->findByClientAndStatus($clientId, 'active'),
+            $manager->subscriptionRepo->findByClientAndStatus($clientId, 'trialing')
+        );
 
         if (empty($subs)) {
             return null;
         }
 
-        // Return the first active one as array
+        // Return the first active/trialing one as array
         $sub = $subs[0];
         
         // Resolve plan name and amount
