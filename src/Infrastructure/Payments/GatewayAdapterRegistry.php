@@ -54,6 +54,14 @@ final class GatewayAdapterRegistry
             });
         }
 
+        // Default Mock adapter
+        if (!isset(self::$factories['mock'])) {
+            self::register('mock', function (array $credentials = []): PaymentGatewayInterface {
+                $autoApprove = (bool) ($credentials['auto_approve'] ?? true);
+                return new MockAdapter($autoApprove);
+            });
+        }
+
         self::$booted = true;
     }
 

@@ -242,6 +242,26 @@ final class GatewayFormManager extends AbstractFormManager
             $isActive = false;
         }
 
+        // 4. Strict activation rule: Cannot activate gateway if not configured
+        if ($isActive) {
+            $isConfigured = true;
+            foreach ($def->fields() as $field) {
+                if ($field->isRequired()) {
+                    $val = $clean[$field->name()] ?? '';
+                    if ($val === '') {
+                        $isConfigured = false;
+                        break;
+                    }
+                }
+            }
+            if (!$isConfigured) {
+                throw new GatewayFormException(
+                    "No puedes activar la pasarela {$provider} sin haber guardado sus credenciales obligatorias previamente.",
+                    ['is_active' => 'Debes configurar las credenciales obligatorias antes de activar la pasarela.']
+                );
+            }
+        }
+
         return [
             'credentials' => $clean,
             'is_active' => $isActive,
