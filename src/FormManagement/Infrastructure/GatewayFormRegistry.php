@@ -6,6 +6,7 @@ namespace LemurAse\FormManagement\Infrastructure;
 
 use LemurAse\FormManagement\Domain\FieldDefinition;
 use LemurAse\FormManagement\Domain\GatewayFormDefinitionInterface;
+use LemurAse\FormManagement\Infrastructure\Definitions\MockFormDefinition;
 use LemurAse\FormManagement\Infrastructure\Definitions\PayPalFormDefinition;
 use LemurAse\FormManagement\Infrastructure\Definitions\StripeFormDefinition;
 
@@ -39,6 +40,7 @@ final class GatewayFormRegistry
 
         self::register(new StripeFormDefinition());
         self::register(new PayPalFormDefinition());
+        self::register(new MockFormDefinition());
 
         self::$booted = true;
     }
