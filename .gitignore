@@ -7,4 +7,5 @@ lemurdb/tests/test.php
 scripts/
 vendor/
 docs/
+.ia/
 .env
