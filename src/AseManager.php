@@ -603,8 +603,10 @@ final class AseManager
         $gateways = $manager->gatewayRepo->findAllEnabled();
 
         return array_map(fn($g) => [
-            'id' => $g->id()->uuid(),
-            'provider' => $g->provider(),
+            'id'          => $g->id()->uuid(),
+            'provider'    => $g->provider(),
+            'is_active'   => $g->isActive(),
+            'credentials' => $g->credentials(),
         ], $gateways);
     }
 
