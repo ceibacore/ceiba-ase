@@ -104,6 +104,21 @@ final class AseManager
     public static function createCheckoutSession(string $clientId, string $planPriceId, string $gatewayId, string $successUrl, string $cancelUrl): string
     {
         $manager = self::getInstance();
+
+        // Resolve gateway UUID if provider slug (e.g. 'stripe') was passed instead of UUID
+        if (!\Ramsey\Uuid\Uuid::isValid($gatewayId)) {
+            $gwData = self::getGatewayByProvider($gatewayId);
+            if (!$gwData) {
+                $allGws = self::getAllGateways();
+                $gwData = collect($allGws)->firstWhere('provider', $gatewayId);
+            }
+            if ($gwData && !empty($gwData['id']) && \Ramsey\Uuid\Uuid::isValid($gwData['id'])) {
+                $gatewayId = $gwData['id'];
+            } else {
+                throw new \RuntimeException("Payment gateway provider '{$gatewayId}' is not configured in database.");
+            }
+        }
+
         $useCase = new CreateOrder(
             $manager->orderRepo,
             $manager->planPriceRepo,
