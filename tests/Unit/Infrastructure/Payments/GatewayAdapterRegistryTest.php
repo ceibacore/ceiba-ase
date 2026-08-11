@@ -25,6 +25,7 @@ class GatewayAdapterRegistryTest extends TestCase
         $this->assertTrue(GatewayAdapterRegistry::has('stripe'));
         $this->assertTrue(GatewayAdapterRegistry::has('paypal'));
         $this->assertTrue(GatewayAdapterRegistry::has('mercadopago'));
+        $this->assertTrue(GatewayAdapterRegistry::has('alipay'));
     }
 
     public function testMakeDefaultStripeAdapter(): void
@@ -117,5 +118,23 @@ class GatewayAdapterRegistryTest extends TestCase
 
         $adapter = GatewayAdapterRegistry::make('mercadopago', $credentials);
         $this->assertInstanceOf(\LemurAse\Infrastructure\Payments\MercadoPagoAdapter::class, $adapter);
+    }
+
+    public function testMakeDefaultAlipayAdapter(): void
+    {
+        $res = openssl_pkey_new(['digest_alg' => 'sha256', 'private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+        openssl_pkey_export($res, $privKey);
+        $pubKey = openssl_pkey_get_details($res)['key'];
+
+        $credentials = [
+            'client_id'         => 'SANDBOX_123',
+            'private_key'       => $privKey,
+            'alipay_public_key' => $pubKey,
+            'merchant_id'       => '2188123',
+            'sandbox'           => true,
+        ];
+
+        $adapter = GatewayAdapterRegistry::make('alipay', $credentials);
+        $this->assertInstanceOf(\LemurAse\Infrastructure\Payments\AlipayAdapter::class, $adapter);
     }
 }

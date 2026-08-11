@@ -8,6 +8,7 @@ use LemurAse\FormManagement\Domain\FieldDefinition;
 use LemurAse\FormManagement\Domain\GatewayFormDefinitionInterface;
 use LemurAse\FormManagement\Infrastructure\Definitions\MockFormDefinition;
 use LemurAse\FormManagement\Infrastructure\Definitions\MercadoPagoFormDefinition;
+use LemurAse\FormManagement\Infrastructure\Definitions\AlipayFormDefinition;
 use LemurAse\FormManagement\Infrastructure\Definitions\PayPalFormDefinition;
 use LemurAse\FormManagement\Infrastructure\Definitions\StripeFormDefinition;
 
@@ -43,6 +44,7 @@ final class GatewayFormRegistry
         self::register(new PayPalFormDefinition());
         self::register(new MockFormDefinition());
         self::register(new MercadoPagoFormDefinition());
+        self::register(new AlipayFormDefinition());
 
         self::$booted = true;
     }

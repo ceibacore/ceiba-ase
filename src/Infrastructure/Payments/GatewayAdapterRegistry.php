@@ -75,6 +75,19 @@ final class GatewayAdapterRegistry
             });
         }
 
+
+        // Default Alipay Global adapter
+        if (!isset(self::$factories['alipay'])) {
+            self::register('alipay', function (array $credentials): PaymentGatewayInterface {
+                $clientId       = $credentials['client_id']         ?? throw new \RuntimeException("Alipay credential 'client_id' missing.");
+                $privateKey     = $credentials['private_key']       ?? throw new \RuntimeException("Alipay credential 'private_key' missing.");
+                $alipayPubKey   = $credentials['alipay_public_key'] ?? throw new \RuntimeException("Alipay credential 'alipay_public_key' missing.");
+                $merchantId     = $credentials['merchant_id']       ?? throw new \RuntimeException("Alipay credential 'merchant_id' missing.");
+                $sandbox        = (bool) ($credentials['sandbox'] ?? false);
+
+                return new AlipayAdapter($clientId, $privateKey, $alipayPubKey, $merchantId, $sandbox);
+            });
+        }
         self::$booted = true;
     }
 
