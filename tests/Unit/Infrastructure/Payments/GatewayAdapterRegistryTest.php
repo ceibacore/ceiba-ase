@@ -24,6 +24,7 @@ class GatewayAdapterRegistryTest extends TestCase
         // has() will automatically call boot()
         $this->assertTrue(GatewayAdapterRegistry::has('stripe'));
         $this->assertTrue(GatewayAdapterRegistry::has('paypal'));
+        $this->assertTrue(GatewayAdapterRegistry::has('mercadopago'));
     }
 
     public function testMakeDefaultStripeAdapter(): void
@@ -103,5 +104,18 @@ class GatewayAdapterRegistryTest extends TestCase
         $this->expectExceptionMessage("Factory for 'invalid_gateway' must return an instance of PaymentGatewayInterface.");
 
         GatewayAdapterRegistry::make('invalid_gateway', []);
+    }
+
+    public function testMakeDefaultMercadoPagoAdapter(): void
+    {
+        $credentials = [
+            'access_token'   => 'APP_USR-test-token',
+            'public_key'     => 'APP_USR-test-pubkey',
+            'webhook_secret' => 'whsec_test',
+            'sandbox'        => true,
+        ];
+
+        $adapter = GatewayAdapterRegistry::make('mercadopago', $credentials);
+        $this->assertInstanceOf(\LemurAse\Infrastructure\Payments\MercadoPagoAdapter::class, $adapter);
     }
 }

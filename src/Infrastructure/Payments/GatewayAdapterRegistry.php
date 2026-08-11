@@ -62,6 +62,19 @@ final class GatewayAdapterRegistry
             });
         }
 
+
+        // Default Mercado Pago adapter
+        if (!isset(self::$factories['mercadopago'])) {
+            self::register('mercadopago', function (array $credentials): PaymentGatewayInterface {
+                $accessToken   = $credentials['access_token']   ?? throw new \RuntimeException("MercadoPago credential 'access_token' missing.");
+                $publicKey     = $credentials['public_key']     ?? throw new \RuntimeException("MercadoPago credential 'public_key' missing.");
+                $webhookSecret = $credentials['webhook_secret'] ?? throw new \RuntimeException("MercadoPago credential 'webhook_secret' missing.");
+                $sandbox       = (bool) ($credentials['sandbox'] ?? false);
+
+                return new MercadoPagoAdapter($accessToken, $publicKey, $webhookSecret, $sandbox);
+            });
+        }
+
         self::$booted = true;
     }
 
