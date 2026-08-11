@@ -624,12 +624,34 @@ final class AseManager
         $manager = self::getInstance();
         $gateways = $manager->gatewayRepo->findAll();
 
-        return array_map(fn($g) => [
-            'id' => $g->id()->uuid(),
-            'provider' => $g->provider(),
-            'is_active' => $g->isActive(),
-            'credentials' => $g->credentials(),
-        ], $gateways);
+        $existingProviders = [];
+        $result = [];
+
+        foreach ($gateways as $g) {
+            $existingProviders[$g->provider()] = true;
+            $result[] = [
+                'id'          => $g->id()->uuid(),
+                'provider'    => $g->provider(),
+                'is_active'   => $g->isActive(),
+                'credentials' => $g->credentials(),
+            ];
+        }
+
+        // Auto-register missing providers from GatewayFormRegistry so all registered providers appear in UI
+        $knownDefinitions = \LemurAse\FormManagement\Infrastructure\GatewayFormRegistry::all();
+        foreach ($knownDefinitions as $provider => $def) {
+            if (!isset($existingProviders[$provider])) {
+                $newGw = self::upsertGateway($provider, [], false);
+                $result[] = [
+                    'id'          => $newGw['id'],
+                    'provider'    => $provider,
+                    'is_active'   => false,
+                    'credentials' => [],
+                ];
+            }
+        }
+
+        return $result;
     }
 
     /**
