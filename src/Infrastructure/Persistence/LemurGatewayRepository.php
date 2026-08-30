@@ -16,10 +16,18 @@ final class LemurGatewayRepository implements GatewayRepositoryInterface
 
     public function __construct()
     {
-        // Encryptor is optional — if GATEWAY_ENCRYPTION_KEY is not set,
-        // credentials are stored as plaintext JSON (legacy / dev mode).
-        // Production deployments MUST set GATEWAY_ENCRYPTION_KEY.
+        // Enforce GATEWAY_ENCRYPTION_KEY in production / non-local environments
         $key = (string) getenv('GATEWAY_ENCRYPTION_KEY');
+        $env = (string) (getenv('APP_ENV') ?: 'production');
+        $isLocalDev = in_array(strtolower($env), ['local', 'testing', 'dev', 'development'], true);
+
+        if ($key === '' && !$isLocalDev) {
+            throw new \RuntimeException(
+                'CRITICAL SECURITY: GATEWAY_ENCRYPTION_KEY is required in production/staging environments. ' .
+                'Generate one with: php -r "echo base64_encode(random_bytes(32));"'
+            );
+        }
+
         $this->encryptor = $key !== '' ? new CredentialEncryptor($key) : null;
     }
 
@@ -98,7 +106,7 @@ final class LemurGatewayRepository implements GatewayRepositoryInterface
             return $this->encryptor->encrypt($credentials);
         }
 
-        // Plaintext fallback (dev / no key configured)
+        // Plaintext fallback (only in local/testing dev mode without key)
         return json_encode($credentials, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     }
 
