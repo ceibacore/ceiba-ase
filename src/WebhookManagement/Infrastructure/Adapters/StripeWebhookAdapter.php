@@ -8,14 +8,25 @@ final class StripeWebhookAdapter implements WebhookAdapterInterface
 {
     public function parse(string $payload, array $headers, array $config): WebhookEvent
     {
-        $event = json_decode($payload, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new \Exception("Invalid JSON payload");
+        $sigHeader = $headers['stripe-signature'][0] ?? $headers['Stripe-Signature'][0] ?? (is_string($headers['stripe-signature'] ?? null) ? $headers['stripe-signature'] : (is_string($headers['Stripe-Signature'] ?? null) ? $headers['Stripe-Signature'] : null));
+        
+        if (!$sigHeader) {
+            throw new \Exception("Missing stripe-signature header");
+        }
+        
+        if (empty($config['webhook_secret'])) {
+            throw new \Exception("Missing Stripe webhook_secret in configuration");
         }
 
-        // In a real production app, we would use Stripe\Webhook::constructEvent
-        // with the signature header and $config['webhook_secret'].
-        // For this implementation, we focus on the mapping logic.
+        try {
+            $stripeEvent = \Stripe\Webhook::constructEvent($payload, $sigHeader, $config['webhook_secret']);
+        } catch (\UnexpectedValueException $e) {
+            throw new \Exception("Invalid payload");
+        } catch (\Stripe\Exception\SignatureVerificationException $e) {
+            throw new \Exception("Invalid signature");
+        }
+        
+        $event = $stripeEvent->toArray();
 
         $type = $event['type'] ?? '';
         $data = $event['data']['object'] ?? [];
