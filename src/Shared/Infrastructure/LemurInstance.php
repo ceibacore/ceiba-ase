@@ -4,7 +4,6 @@ namespace LemurAse\Shared\Infrastructure;
 
 use LemurDB;
 
-require_once __DIR__ . '/../../../lemurdb/lemurdb.php';
 
 class LemurInstance
 {
