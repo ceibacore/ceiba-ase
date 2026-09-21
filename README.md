@@ -15,7 +15,7 @@
 - ✅ Handles the **full order lifecycle**: checkout → payment → subscription → invoice → audit log
 - ✅ Enforces **security by design**: HMAC-SHA256 (Stripe) + RSA-SHA256 (PayPal) webhook validation
 - ✅ Guarantees **idempotent webhook processing** — no duplicate charges or subscriptions
-- ✅ Persists everything through **LemurDB**, its own embedded query layer (no Eloquent, no Doctrine)
+- ✅ Persists everything through **CeibaDB**, its own embedded query layer (no Eloquent, no Doctrine)
 - ✅ **Trial periods** with automatic state transitions (trialing → active)
 - ✅ **Flexible billing periods** (daily, monthly, quarterly, yearly) with customizable intervals
 - ✅ **Full refund processing** (full & partial) with audit trail
@@ -44,14 +44,14 @@
 ### 1. Install Database Schema
 
 ```bash
-cd lemur-ase
+cd ceiba-ase
 php bin/ase-migrate migrate
 ```
 
 ### 2. Configure Gateways
 
 ```php
-use LemurAse\AseManager;
+use CeibaAse\AseManager;
 
 // Register Stripe
 AseManager::registerGateway('stripe', [
@@ -140,7 +140,7 @@ Route::post('/ase/webhooks/stripe/{gatewayId}', function($gatewayId) {
 The host application can hook into the engine's lifecycle safely without touching the database or handling complex logic. Register your listeners in your app's boot phase (e.g., `AppServiceProvider` in Laravel):
 
 ```php
-use LemurAse\AseManager;
+use CeibaAse\AseManager;
 
 // Grant course access when a subscription starts or renews
 AseManager::listen('subscription.created', function($subscription) {
@@ -208,17 +208,17 @@ Built on **Hexagonal Architecture (Ports & Adapters)** and **Domain-Driven Desig
 │      └── EntityId, Money, Currency                          │
 │                                                              │
 │  Infrastructure Layer (Adapters)                            │
-│  ├── Persistence → LemurDB (embedded PDO query layer)       │
+│  ├── Persistence → CeibaDB (embedded PDO query layer)       │
 │  ├── Payments    → StripeAdapter, PayPalAdapter            │
 │  │   ├── Stripe:  HMAC-SHA256 webhook validation           │
 │  │   └── PayPal:  RSA-SHA256 certificate validation        │
 │  └── Http        → PSR-7 webhook receiver                   │
 │                                                              │
-│  Repositories (LemurDB-backed)                              │
-│  ├── LemurPlanRepository       ├── LemurOrderRepository      │
-│  ├── LemurPlanPriceRepository  ├── LemurSubscriptionRepo    │
-│  ├── LemurGatewayRepository    ├── LemurInvoiceRepository   │
-│  ├── LemurCustomPriceRepository└── LemurTransactionLogRepo  │
+│  Repositories (CeibaDB-backed)                              │
+│  ├── CeibaPlanRepository       ├── CeibaOrderRepository      │
+│  ├── CeibaPlanPriceRepository  ├── CeibaSubscriptionRepo    │
+│  ├── CeibaGatewayRepository    ├── CeibaInvoiceRepository   │
+│  ├── CeibaCustomPriceRepository└── CeibaTransactionLogRepo  │
 │                                                              │
 │  Migration System                                            │
 │  ├── AseSchemaBuilder (CREATE TABLE / ALTER TABLE)          │
@@ -257,7 +257,7 @@ Metadata:
 ## Module Structure (Production Layout)
 
 ```
-lemur-ase/
+ceiba-ase/
 │
 ├── bin/
 │   └── ase-migrate              ← CLI tool: migrate|rollback|status|fresh|make
@@ -306,12 +306,12 @@ lemur-ase/
 │   ├── Infrastructure/
 │   │   ├── Persistence/
 │   │   │   ├── BaseRepository.php
-│   │   │   ├── LemurPlanRepository.php
-│   │   │   ├── LemurOrderRepository.php
-│   │   │   ├── LemurGatewayRepository.php  ← Multi-gateway queries
-│   │   │   ├── LemurSubscriptionRepository.php
-│   │   │   ├── LemurInvoiceRepository.php
-│   │   │   └── LemurTransactionLogRepository.php
+│   │   │   ├── CeibaPlanRepository.php
+│   │   │   ├── CeibaOrderRepository.php
+│   │   │   ├── CeibaGatewayRepository.php  ← Multi-gateway queries
+│   │   │   ├── CeibaSubscriptionRepository.php
+│   │   │   ├── CeibaInvoiceRepository.php
+│   │   │   └── CeibaTransactionLogRepository.php
 │   │   ├── Payments/
 │   │   │   ├── StripeAdapter.php         ← Real HMAC-SHA256 validation
 │   │   │   └── PayPalAdapter.php         ← Real RSA-SHA256 validation
@@ -332,7 +332,7 @@ lemur-ase/
 │   │       └── PostgreSQLDialect.php    ← Scaffolded
 │   │
 │   └── Shared/
-│       └── LemurInstance.php
+│       └── CeibaInstance.php
 │
 ├── tests/
 │   ├── Unit/
@@ -360,7 +360,7 @@ lemur-ase/
 │   ├── lemurdb.php                ← Embedded PDO query builder
 │   ├── README.md
 │   └── tests/
-│       └── LemurDBNewFeaturesTest.php
+│       └── CeibaDBNewFeaturesTest.php
 │
 ├── composer.json
 ├── phpunit.xml
@@ -639,8 +639,8 @@ php bin/ase-migrate make create_subscriptions_table
 ```php
 // migrations/php/20260505000000_add_payment_method_column.php
 
-use LemurAse\Migration\AseBaseMigration;
-use LemurAse\Migration\AseSchemaBuilder;
+use CeibaAse\Migration\AseBaseMigration;
+use CeibaAse\Migration\AseSchemaBuilder;
 
 class Migration_20260505000000_AddPaymentMethodColumn extends AseBaseMigration
 {
@@ -716,7 +716,7 @@ class PostgreSQLDialect implements AseDialectInterface
 - **PHP** >= 8.1 (with `match` expressions)
 - **PDO** extension with `pdo_mysql` driver
 - **MySQL** 8.0+ OR **PostgreSQL** 14+ (via dialect)
-- **No Composer dependencies** for core (LemurDB is embedded)
+- **No Composer dependencies** for core (CeibaDB is embedded)
 - **Optional:** `ramsey/uuid` for UUID generation (fallback to PHP 8.1+ native support)
 
 ---
@@ -727,7 +727,7 @@ class PostgreSQLDialect implements AseDialectInterface
 
 ```php
 // In your service provider
-use LemurAse\Ase;
+use CeibaAse\Ase;
 
 class AseServiceProvider extends ServiceProvider
 {
@@ -751,7 +751,7 @@ class AseServiceProvider extends ServiceProvider
 
 ```php
 // In your service
-use LemurAse\Ase;
+use CeibaAse\Ase;
 
 class SubscriptionService
 {
@@ -770,7 +770,7 @@ class SubscriptionService
 
 ```php
 // In your plugin bootstrap
-use LemurAse\Ase;
+use CeibaAse\Ase;
 
 add_action('plugins_loaded', function() {
     global $wpdb;
@@ -855,7 +855,7 @@ ASE is production-ready and battle-tested. For issues or enhancements, open an i
 
 ## License
 
-MIT — © Lemur Bookstores (2026)
+MIT — © Ceiba Bookstores (2026)
 
 **Status:** ✅ Production Ready (v1.0.0)
 
@@ -904,7 +904,7 @@ $plan = AseManager::createPlan(
 
 ```php
 // After retrieving a plan via repository
-$planRepo = new LemurPlanRepository();
+$planRepo = new CeibaPlanRepository();
 $plan = $planRepo->findBySlug('enterprise');
 
 // Get entire metadata
@@ -926,14 +926,14 @@ For admin dashboards and filtering:
 
 ```php
 // MySQL: Get all recommended plans
-$db = LemurInstance::get();
+$db = CeibaInstance::get();
 $recommended = $db->query('ase_plans')
     ->where([
         'is_active' => 1
     ])
     ->get();
 
-// Filter in PHP (LemurDB does not support JSON_EXTRACT in WHERE yet)
+// Filter in PHP (CeibaDB does not support JSON_EXTRACT in WHERE yet)
 $recommended = array_filter($recommended, function($row) {
     $metadata = json_decode($row['metadata'] ?? '{}', true);
     return $metadata['is_recommended'] ?? false;

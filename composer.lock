@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "feee3a61512ce25623ae0771e60ffae7",
+    "content-hash": "51054a6e7249543f4e95edcd984f6f79",
     "packages": [
         {
             "name": "brick/math",
@@ -68,11 +68,17 @@
         },
         {
             "name": "ceibacore/ceiba-db",
-            "version": "dev-main",
-            "dist": {
-                "type": "path",
-                "url": "../ceiba-db",
+            "version": "v1.0.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/ceibacore/ceiba-db.git",
                 "reference": "4dcb73121a8452533a5e7fd9de8b2c737fdb80cc"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/ceibacore/ceiba-db/zipball/4dcb73121a8452533a5e7fd9de8b2c737fdb80cc",
+                "reference": "4dcb73121a8452533a5e7fd9de8b2c737fdb80cc",
+                "shasum": ""
             },
             "require": {
                 "ext-pdo": "*",
@@ -87,11 +93,7 @@
                     "ceibadb.php"
                 ]
             },
-            "scripts": {
-                "test": [
-                    "vendor/bin/phpunit"
-                ]
-            },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "MIT"
             ],
@@ -102,10 +104,11 @@
                 }
             ],
             "description": "CeibaDB — Lightweight PDO query builder and database abstraction layer for Ceiba Core ecosystem",
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
+            "support": {
+                "issues": "https://github.com/ceibacore/ceiba-db/issues",
+                "source": "https://github.com/ceibacore/ceiba-db/tree/v1.0.0"
+            },
+            "time": "2026-09-21T03:28:18+00:00"
         },
         {
             "name": "guzzlehttp/guzzle",
@@ -2673,9 +2676,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "ceibacore/ceiba-db": 20
-    },
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {

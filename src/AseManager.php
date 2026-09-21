@@ -12,14 +12,14 @@ use LemurAse\Application\UseCases\CreateGateway;
 use LemurAse\Application\UseCases\UpsertGateway;
 use LemurAse\Domain\Services\SecurityService;
 use LemurAse\Shared\Infrastructure\EnvironmentGuard;
-use LemurAse\Infrastructure\Persistence\LemurOrderRepository;
-use LemurAse\Infrastructure\Persistence\LemurPlanPriceRepository;
-use LemurAse\Infrastructure\Persistence\LemurCustomPriceRepository;
-use LemurAse\Infrastructure\Persistence\LemurSubscriptionRepository;
-use LemurAse\Infrastructure\Persistence\LemurInvoiceRepository;
-use LemurAse\Infrastructure\Persistence\LemurTransactionLogRepository;
-use LemurAse\Infrastructure\Persistence\LemurPlanRepository;
-use LemurAse\Infrastructure\Persistence\LemurGatewayRepository;
+use LemurAse\Infrastructure\Persistence\CeibaOrderRepository;
+use LemurAse\Infrastructure\Persistence\CeibaPlanPriceRepository;
+use LemurAse\Infrastructure\Persistence\CeibaCustomPriceRepository;
+use LemurAse\Infrastructure\Persistence\CeibaSubscriptionRepository;
+use LemurAse\Infrastructure\Persistence\CeibaInvoiceRepository;
+use LemurAse\Infrastructure\Persistence\CeibaTransactionLogRepository;
+use LemurAse\Infrastructure\Persistence\CeibaPlanRepository;
+use LemurAse\Infrastructure\Persistence\CeibaGatewayRepository;
 use LemurAse\Infrastructure\Payments\GatewayAdapterRegistry;
 use LemurAse\Infrastructure\Events\AseEventDispatcher;
 use LemurAse\Domain\Gateways\PaymentGatewayInterface;
@@ -53,14 +53,14 @@ final class AseManager
     private static ?self $instance = null;
 
     // Repositories
-    public LemurOrderRepository $orderRepo;
-    public LemurPlanPriceRepository $planPriceRepo;
-    public LemurCustomPriceRepository $customPriceRepo;
-    public LemurSubscriptionRepository $subscriptionRepo;
-    public LemurInvoiceRepository $invoiceRepo;
-    public LemurTransactionLogRepository $logRepo;
-    public LemurPlanRepository $planRepo;
-    public LemurGatewayRepository $gatewayRepo;
+    public CeibaOrderRepository $orderRepo;
+    public CeibaPlanPriceRepository $planPriceRepo;
+    public CeibaCustomPriceRepository $customPriceRepo;
+    public CeibaSubscriptionRepository $subscriptionRepo;
+    public CeibaInvoiceRepository $invoiceRepo;
+    public CeibaTransactionLogRepository $logRepo;
+    public CeibaPlanRepository $planRepo;
+    public CeibaGatewayRepository $gatewayRepo;
 
     // Services
     public SecurityService $securityService;
@@ -69,14 +69,14 @@ final class AseManager
     private function __construct()
     {
         EnvironmentGuard::check();
-        $this->orderRepo = new LemurOrderRepository();
-        $this->planPriceRepo = new LemurPlanPriceRepository();
-        $this->customPriceRepo = new LemurCustomPriceRepository();
-        $this->subscriptionRepo = new LemurSubscriptionRepository();
-        $this->invoiceRepo = new LemurInvoiceRepository();
-        $this->logRepo = new LemurTransactionLogRepository();
-        $this->planRepo = new LemurPlanRepository();
-        $this->gatewayRepo = new LemurGatewayRepository();
+        $this->orderRepo = new CeibaOrderRepository();
+        $this->planPriceRepo = new CeibaPlanPriceRepository();
+        $this->customPriceRepo = new CeibaCustomPriceRepository();
+        $this->subscriptionRepo = new CeibaSubscriptionRepository();
+        $this->invoiceRepo = new CeibaInvoiceRepository();
+        $this->logRepo = new CeibaTransactionLogRepository();
+        $this->planRepo = new CeibaPlanRepository();
+        $this->gatewayRepo = new CeibaGatewayRepository();
 
         $this->securityService = new SecurityService();
         $this->priceCalculator = new PriceCalculator($this->customPriceRepo);
@@ -332,9 +332,9 @@ final class AseManager
         ];
 
         // In a real scenario, this would use the CustomPriceRepository to save it.
-        // As LemurCustomPriceRepository only has findByClientAndPlanPrice right now, 
+        // As CeibaCustomPriceRepository only has findByClientAndPlanPrice right now, 
         // we use the query builder directly for this demo.
-        \LemurAse\Shared\Infrastructure\LemurInstance::get()
+        \LemurAse\Shared\Infrastructure\CeibaInstance::get()
             ->query(\LemurAse\Infrastructure\Persistence\TableNames::CUSTOM_PRICES)
             ->insert($data);
     }
@@ -364,7 +364,7 @@ final class AseManager
         $status = $atPeriodEnd ? 'active' : 'canceled';
         $canceledAt = (new \DateTimeImmutable())->format('Y-m-d H:i:s');
 
-        \LemurAse\Shared\Infrastructure\LemurInstance::get()
+        \LemurAse\Shared\Infrastructure\CeibaInstance::get()
             ->query(\LemurAse\Infrastructure\Persistence\TableNames::SUBSCRIPTIONS)
             ->where(['id' => $subscriptionId])
             ->update([
@@ -391,7 +391,7 @@ final class AseManager
         $result = $adapter->pauseSubscription($sub->externalSubscriptionId());
 
         if (($result['status'] ?? 'failed') === 'success') {
-            \LemurAse\Shared\Infrastructure\LemurInstance::get()
+            \LemurAse\Shared\Infrastructure\CeibaInstance::get()
                 ->query(\LemurAse\Infrastructure\Persistence\TableNames::SUBSCRIPTIONS)
                 ->where(['id' => $subscriptionId])
                 ->update(['status' => 'paused']);
@@ -750,7 +750,7 @@ final class AseManager
      */
     public static function getClientLatestPendingOrder(string $clientId): ?array
     {
-        $db = \LemurAse\Shared\Infrastructure\LemurInstance::get();
+        $db = \LemurAse\Shared\Infrastructure\CeibaInstance::get();
         $row = $db->query(\LemurAse\Infrastructure\Persistence\TableNames::ORDERS)
             ->where(['external_client_id' => $clientId, 'status' => 'pending'])
             ->orderBy('created_at', 'DESC')
@@ -893,7 +893,7 @@ final class AseManager
      */
     public static function getGatewayCustomerId(string $clientId, string $provider): ?string
     {
-        $row = \LemurAse\Shared\Infrastructure\LemurInstance::get()
+        $row = \LemurAse\Shared\Infrastructure\CeibaInstance::get()
             ->query(\LemurAse\Infrastructure\Persistence\TableNames::CUSTOMERS)
             ->where(['client_id' => $clientId, 'gateway_provider' => $provider])
             ->first();
@@ -906,7 +906,7 @@ final class AseManager
      */
     public static function saveGatewayCustomerId(string $clientId, string $provider, string $gatewayCustomerId): void
     {
-        $db = \LemurAse\Shared\Infrastructure\LemurInstance::get();
+        $db = \LemurAse\Shared\Infrastructure\CeibaInstance::get();
         $existing = self::getGatewayCustomerId($clientId, $provider);
 
         $data = [
