@@ -50,6 +50,15 @@ final class CreateOrder
 
         $this->orderRepo->save($order);
 
+        \LemurAse\Infrastructure\Events\AseEventDispatcher::dispatch('subscription.created', [
+            'order_id'           => $order->id()->uuid(),
+            'external_client_id' => $clientId,
+            'plan_price_id'      => $planPriceId,
+            'gateway_id'         => $gatewayId,
+            'amount'             => $amount->amount(),
+            'currency'           => $amount->currency()->toString(),
+        ], 'order', $order->id()->uuid());
+
         return $order;
     }
 }

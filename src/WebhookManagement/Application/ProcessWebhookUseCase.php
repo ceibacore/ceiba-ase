@@ -150,6 +150,12 @@ final class ProcessWebhookUseCase
             null, $subscription->externalSubscriptionId()
         );
         $this->subRepo->save($updatedSub);
+
+        AseEventDispatcher::dispatch('subscription.payment_failed', [
+            'subscription_id'    => $subscription->id()->uuid(),
+            'external_client_id' => $subscription->externalClientId(),
+            'reason'             => $data['failure_reason'] ?? 'payment_failed',
+        ], 'subscription', $subscription->id()->uuid());
     }
 
     private function handleCancellation(array $data): void
@@ -200,7 +206,12 @@ final class ProcessWebhookUseCase
             AseEventDispatcher::dispatch('subscription.canceled', [
                 'subscription_id' => $subscription->id()->uuid(),
                 'immediate'       => false,
-            ]);
+            ], 'subscription', $subscription->id()->uuid());
+        } elseif ($newStatus === 'past_due' || $newStatus === 'suspended') {
+            AseEventDispatcher::dispatch('subscription.suspended', [
+                'subscription_id' => $subscription->id()->uuid(),
+                'reason'          => 'provider_status_' . $newStatus,
+            ], 'subscription', $subscription->id()->uuid());
         }
     }
 
