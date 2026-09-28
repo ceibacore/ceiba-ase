@@ -45,12 +45,17 @@ final class StripeAdapter implements PaymentGatewayInterface
         }
 
         $userId = $order->externalClientId();
-        $stripeCustomerId = \LemurAse\AseManager::getGatewayCustomerId($userId, 'stripe');
+        $stripeCustomerId = null;
+        try {
+            $stripeCustomerId = \LemurAse\AseManager::getGatewayCustomerId($userId, 'stripe');
+        } catch (\Throwable $e) {
+            // Non-blocking in offline / test environments
+        }
 
         if (!$stripeCustomerId && class_exists('App\Models\User')) {
-            $user = \App\Models\User::find($userId);
-            if ($user) {
-                try {
+            try {
+                $user = \App\Models\User::find($userId);
+                if ($user) {
                     // 1. Search Stripe for existing customer with this email
                     $search = \Stripe\Customer::search([
                         'query' => "email:'" . $user->email . "'",
@@ -68,26 +73,55 @@ final class StripeAdapter implements PaymentGatewayInterface
                         ]);
                         $stripeCustomerId = $customer->id;
                     }
-                    \LemurAse\AseManager::saveGatewayCustomerId($userId, 'stripe', $stripeCustomerId);
-                } catch (\Exception $e) {
-                    error_log("Stripe customer creation/lookup failed: " . $e->getMessage());
+                    try {
+                        \LemurAse\AseManager::saveGatewayCustomerId($userId, 'stripe', $stripeCustomerId);
+                    } catch (\Throwable) {}
+                }
+            } catch (\Exception $e) {
+                error_log("Stripe customer creation/lookup failed: " . $e->getMessage());
+            }
+        }
+
+        // Determine mode and recurring options from PlanPrice
+        $productName = 'Subscription';
+        $mode = 'payment';
+        $priceData = [
+            'currency' => strtolower($order->amount()->currency()->toString()),
+            'product_data' => [
+                'name' => $productName,
+            ],
+            'unit_amount' => (int) round($order->amount()->amount() * 100),
+        ];
+
+        try {
+            $planPriceRepo = new \LemurAse\Infrastructure\Persistence\CeibaPlanPriceRepository();
+            $planRepo      = new \LemurAse\Infrastructure\Persistence\CeibaPlanRepository();
+            $planPrice     = $planPriceRepo->findById($order->planPriceId());
+            if ($planPrice) {
+                $plan = $planRepo->findById($planPrice->planId());
+                if ($plan) {
+                    $productName = $plan->name();
+                    $priceData['product_data']['name'] = $productName;
+                }
+                if ($planPrice->type() === 'recurring') {
+                    $mode = 'subscription';
+                    $priceData['recurring'] = [
+                        'interval'       => $planPrice->interval() ?? 'month',
+                        'interval_count' => $planPrice->intervalCount() ?? 1,
+                    ];
                 }
             }
+        } catch (\Throwable $e) {
+            error_log("StripeAdapter: Plan price resolution fallback: " . $e->getMessage());
         }
 
         $sessionParams = [
             'payment_method_types' => ['card'],
             'line_items' => [[
-                'price_data' => [
-                    'currency' => strtolower($order->amount()->currency()->toString()),
-                    'product_data' => [
-                        'name' => 'Subscription',
-                    ],
-                    'unit_amount' => (int) round($order->amount()->amount() * 100),
-                ],
+                'price_data' => $priceData,
                 'quantity' => 1,
             ]],
-            'mode' => 'payment', // Can be changed to 'subscription' if needed
+            'mode' => $mode,
             'client_reference_id' => $order->externalClientId(),
             'metadata' => [
                 'order_id' => $order->id()->uuid(),
