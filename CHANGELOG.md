@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-11-08
+
+### Upgrade notes
+- **Alipay needs the host's webhook URL.** Register it once at boot:
+  `WebhookUrls::resolveUsing(fn (string $provider) => route('webhooks.ase', $provider));`
+  Without it, Alipay checkout fails with a clear error instead of creating a payment whose result can never arrive.
+
+### Added
+- `WebhookUrls::resolveUsing()`, `for()` and `pathFor()`: the host supplies the public webhook URL of each provider. The URL must be an absolute http(s) URL without a query string.
+
+### Fixed
+- Alipay checkout sent `paymentNotifyUrl` as the success page (`{successUrl}?webhook=alipay`), so payment notifications never reached the webhook. It now sends the host's webhook URL.
+- Alipay signature verification used a fixed `/webhooks/alipay` path. It now uses the path of that same webhook URL, so the URL that is sent and the path that is verified always match; an explicit `notify_path` credential still takes precedence. `AlipayAdapter::validateWebhook()` follows the same rule.
+- Invalid Alipay signatures throw `WebhookSignatureException`, so hosts answer 401.
+
 ## [1.3.1] - 2026-11-08
 
 ### Fixed
