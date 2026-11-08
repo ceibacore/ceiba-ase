@@ -81,7 +81,7 @@ final class StripeAdapter implements PaymentGatewayInterface
             'product_data' => [
                 'name' => $productName,
             ],
-            'unit_amount' => (int) round($order->amount()->amount() * 100),
+            'unit_amount' => \LemurAse\Domain\ValueObjects\MinorUnits::toMinor($order->amount()->amount(), $order->amount()->currency()->toString()),
         ];
 
         try {
@@ -184,7 +184,12 @@ final class StripeAdapter implements PaymentGatewayInterface
         $data = $payload['data']['object'] ?? [];
 
         $action = match ($type) {
-            'checkout.session.completed' => 'INITIAL_PAYMENT',
+            // A completed session may still be unpaid (asynchronous methods): only paid
+            // or no-payment-required (trial) sessions activate.
+            'checkout.session.completed' => in_array($data['payment_status'] ?? '', ['paid', 'no_payment_required'], true)
+                ? 'INITIAL_PAYMENT' : 'IGNORED',
+            'checkout.session.async_payment_succeeded' => 'INITIAL_PAYMENT',
+            'checkout.session.async_payment_failed' => 'PAYMENT_FAILED',
             'invoice.paid' => 'RENEWAL_PAYMENT',
             'invoice.payment_failed' => 'PAYMENT_FAILED',
             'customer.subscription.deleted', 'customer.subscription.canceled' => 'SUBSCRIPTION_CANCELED',
@@ -206,7 +211,7 @@ final class StripeAdapter implements PaymentGatewayInterface
             'external_subscription_id' => $data['subscription'] ?? $data['id'] ?? null,
             'external_transaction_id' => $payload['id'] ?? null,
             'internal_order_id' => $data['metadata']['order_id'] ?? $data['client_reference_id'] ?? null,
-            'amount' => ($data['amount_total'] ?? $data['amount_paid'] ?? $data['amount'] ?? 0) / 100,
+            'amount' => \LemurAse\Domain\ValueObjects\MinorUnits::fromMinor($data['amount_total'] ?? $data['amount_paid'] ?? $data['amount'] ?? 0, (string) ($data['currency'] ?? 'USD')),
             'currency' => strtoupper($data['currency'] ?? 'USD'),
             'status' => 'paid',
             'external_client_id' => $data['client_reference_id'] ?? $data['customer'] ?? null,
@@ -242,9 +247,14 @@ final class StripeAdapter implements PaymentGatewayInterface
     {
         try {
             \Stripe\Stripe::setApiKey($this->secretKey);
+            // Minor units depend on the charge currency; payment intents and charges are both accepted.
+            $isIntent = str_starts_with($externalTransactionId, 'pi_');
+            $source = $isIntent
+                ? \Stripe\PaymentIntent::retrieve($externalTransactionId)
+                : \Stripe\Charge::retrieve($externalTransactionId);
             $refund = \Stripe\Refund::create([
-                'charge' => $externalTransactionId,
-                'amount' => (int) round($amount * 100), // Convert to cents
+                ($isIntent ? 'payment_intent' : 'charge') => $externalTransactionId,
+                'amount' => \LemurAse\Domain\ValueObjects\MinorUnits::toMinor($amount, (string) $source->currency),
                 'reason' => $reason === 'fraudulent' ? 'fraudulent' : 'requested_by_customer',
                 'metadata' => ['refund_reason' => $reason]
             ]);
@@ -271,13 +281,13 @@ final class StripeAdapter implements PaymentGatewayInterface
         try {
             $session = \Stripe\Checkout\Session::retrieve($externalId);
             
-            if ($session->payment_status === 'paid') {
+            if (in_array($session->payment_status, ['paid', 'no_payment_required'], true)) {
                 return [
                     'action' => 'INITIAL_PAYMENT',
                     'external_id' => $session->id,
                     'external_subscription_id' => $session->subscription ?? $session->id,
                     'external_transaction_id' => $session->payment_intent ?? $session->id,
-                    'amount' => $session->amount_total / 100,
+                    'amount' => \LemurAse\Domain\ValueObjects\MinorUnits::fromMinor($session->amount_total ?? 0, (string) $session->currency),
                     'currency' => strtoupper($session->currency),
                     'external_client_id' => $session->client_reference_id,
                     'internal_order_id' => $session->metadata->order_id ?? null,

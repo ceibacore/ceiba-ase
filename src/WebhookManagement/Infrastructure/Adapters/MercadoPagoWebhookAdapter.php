@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace LemurAse\WebhookManagement\Infrastructure\Adapters;
 
 use LemurAse\WebhookManagement\Domain\WebhookEvent;
+use LemurAse\Infrastructure\Payments\MercadoPago\MercadoPagoSignature;
 
 /**
  * Mercado Pago webhook adapter.
@@ -32,51 +33,18 @@ final class MercadoPagoWebhookAdapter implements WebhookAdapterInterface
             throw new \Exception('Invalid JSON payload');
         }
 
-        // ── Validate HMAC signature ──────────────────────────────
-        $xSignature = $headers['x-signature']
-            ?? $headers['X-Signature']
-            ?? $headers['X-SIGNATURE']
-            ?? '';
-        $xRequestId = $headers['x-request-id']
-            ?? $headers['X-Request-Id']
-            ?? $headers['X-REQUEST-ID']
-            ?? '';
-
-        if (empty($xSignature) || empty($xRequestId)) {
-            throw new \Exception('Missing x-signature or x-request-id headers');
-        }
-
-        $webhookSecret = $config['webhook_secret']
-            ?? throw new \Exception('Missing webhook_secret in config');
-
-        // Parse ts and v1 from x-signature
-        $ts = '';
-        $v1 = '';
-        foreach (explode(',', $xSignature) as $part) {
-            $kv = explode('=', trim($part), 2);
-            if (count($kv) === 2) {
-                match ($kv[0]) {
-                    'ts' => $ts = $kv[1],
-                    'v1' => $v1 = $kv[1],
-                    default => null,
-                };
-            }
-        }
-
-        if (empty($ts) || empty($v1)) {
-            throw new \Exception('x-signature missing ts or v1 components');
-        }
-
+        // ── Validate HMAC signature and time window ─────────────
         $dataId = (string) ($decoded['data']['id'] ?? '');
-        if (empty($dataId)) {
+        if ($dataId === '') {
             throw new \Exception('Payload missing data.id');
         }
-
-        $signedString = sprintf('id:%s;request-id:%s;ts:%s;', $dataId, $xRequestId, $ts);
-        $computed = hash_hmac('sha256', $signedString, $webhookSecret);
-
-        if (!hash_equals($computed, $v1)) {
-            throw new \Exception('MercadoPago webhook signature verification failed');
+        try {
+            MercadoPagoSignature::verify(
+                $headers, $dataId, (string) ($config['webhook_secret'] ?? ''),
+                (int) ($config['signature_tolerance'] ?? MercadoPagoSignature::DEFAULT_TOLERANCE)
+            );
+        } catch (\InvalidArgumentException $e) {
+            throw new \Exception($e->getMessage());
         }
 
         // ── Fetch full payment details ───────────────────────────
@@ -84,7 +52,7 @@ final class MercadoPagoWebhookAdapter implements WebhookAdapterInterface
             ?? throw new \Exception('Missing access_token in config');
 
         try {
-            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + [
+            $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create([
                 'base_uri' => 'https://api.mercadopago.com',
             ]);
             $response = $client->get("/v1/payments/{$dataId}", [
@@ -121,7 +89,9 @@ final class MercadoPagoWebhookAdapter implements WebhookAdapterInterface
         return new WebhookEvent(
             action:     $action,
             data:       $normalizedData,
-            externalId: (string) ($payment['id'] ?? 'mp_unknown'),
+            // One payment produces several notifications (approved, later refunded): the
+            // idempotency key must include the status or the refund would be discarded.
+            externalId: sprintf('mercadopago:%s:%s', (string) ($payment['id'] ?? $dataId), $paymentStatus ?: 'unknown'),
             provider:   'mercadopago',
             rawPayload: $decoded,
         );

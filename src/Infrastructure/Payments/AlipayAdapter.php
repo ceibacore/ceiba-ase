@@ -51,30 +51,6 @@ final class AlipayAdapter implements PaymentGatewayInterface
     }
 
     /**
-     * Helper to verify webhook signature using RSA-SHA256 with the Alipay public key.
-     */
-    private function verifySignature(string $content, string $signature): bool
-    {
-        $key = $this->alipayPublicKey;
-        if (!str_contains($key, '-----BEGIN')) {
-            $key = "-----BEGIN PUBLIC KEY-----\n" . wordwrap($key, 64, "\n", true) . "\n-----END PUBLIC KEY-----";
-        }
-
-        $publicKeyResource = openssl_pkey_get_public($key);
-        if (!$publicKeyResource) {
-            error_log('Alipay: invalid public key provided for signature verification');
-            return false;
-        }
-
-        $decodedSig = base64_decode($signature, true);
-        if ($decodedSig === false) {
-            return false;
-        }
-
-        return openssl_verify($content, $decodedSig, $publicKeyResource, OPENSSL_ALGO_SHA256) === 1;
-    }
-
-    /**
      * Create an Alipay Cashier Payment checkout session.
      */
     public function createCheckoutSession(Order $order, string $successUrl, string $cancelUrl): array
@@ -82,8 +58,8 @@ final class AlipayAdapter implements PaymentGatewayInterface
         $path = '/ams/api/v1/payments/pay';
         $requestTime = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d\TH:i:sP');
         $orderUuid = $order->id()->uuid();
-        $amountCents = (string) intval(round($order->amount()->amount() * 100));
         $currency = strtoupper($order->amount()->currency()->toString());
+        $amountCents = (string) \LemurAse\Domain\ValueObjects\MinorUnits::toMinor($order->amount()->amount(), $currency);
 
         $requestData = [
             'productCode'      => 'CASHIER_PAYMENT',
@@ -110,7 +86,7 @@ final class AlipayAdapter implements PaymentGatewayInterface
         $jsonBody = json_encode($requestData, JSON_UNESCAPED_SLASHES);
         $signature = $this->signRequest('POST', $path, $jsonBody, $requestTime);
 
-        $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
+        $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create(['base_uri' => self::BASE_URL]);
 
         try {
             $response = $client->post($path, [
@@ -144,43 +120,15 @@ final class AlipayAdapter implements PaymentGatewayInterface
      */
     public function validateWebhook(array $payload, array $headers): bool
     {
-        $signatureHeader = $headers['signature']
-            ?? $headers['Signature']
-            ?? $headers['SIGNATURE']
-            ?? '';
-        $clientId = $headers['client-id']
-            ?? $headers['Client-Id']
-            ?? $headers['CLIENT-ID']
-            ?? $this->clientId;
-        $requestTime = $headers['request-time']
-            ?? $headers['Request-Time']
-            ?? $headers['REQUEST-TIME']
-            ?? '';
-
-        if (empty($signatureHeader)) {
-            error_log('Alipay: missing Signature header in webhook');
-            return false;
-        }
-
-        // Extract signature component (format: algorithm=RSA256,keyVersion=1,signature=xxx)
-        $sigValue = '';
-        foreach (explode(',', $signatureHeader) as $part) {
-            $kv = explode('=', trim($part), 2);
-            if (count($kv) === 2 && $kv[0] === 'signature') {
-                $sigValue = $kv[1];
-                break;
-            }
-        }
-
-        if (empty($sigValue)) {
-            error_log('Alipay: could not extract signature value from header');
-            return false;
-        }
-
+        // The signature covers the exact raw body; re-encoding the decoded payload is a fallback.
         $rawBody = $headers['X-RAW-BODY'] ?? json_encode($payload, JSON_UNESCAPED_SLASHES);
-        $content = sprintf("POST /webhooks/alipay\n%s.%s.%s", $clientId, $requestTime, $rawBody);
-
-        return $this->verifySignature($content, $sigValue);
+        try {
+            Alipay\AlipaySignature::verify((string) $rawBody, $headers, $this->alipayPublicKey, $this->clientId);
+            return true;
+        } catch (\InvalidArgumentException $e) {
+            error_log('Alipay: ' . $e->getMessage());
+            return false;
+        }
     }
 
     /**
@@ -199,8 +147,8 @@ final class AlipayAdapter implements PaymentGatewayInterface
         };
 
         $paymentAmount = $payload['paymentAmount']['value'] ?? $payload['refundAmount']['value'] ?? 0;
-        $amount = (float) $paymentAmount / 100;
         $currency = strtoupper($payload['paymentAmount']['currency'] ?? $payload['refundAmount']['currency'] ?? 'USD');
+        $amount = \LemurAse\Domain\ValueObjects\MinorUnits::fromMinor($paymentAmount, $currency);
 
         return [
             'action'                   => $action,
@@ -227,12 +175,18 @@ final class AlipayAdapter implements PaymentGatewayInterface
         $requestTime = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d\TH:i:sP');
         $refundRequestId = 'refund_' . bin2hex(random_bytes(8));
 
+        // Refund in the payment's own currency (never assume USD): look it up first.
+        $payment = $this->verifyTransaction($externalTransactionId);
+        $currency = strtoupper((string) ($payment['currency'] ?? ''));
+        if (!preg_match('/^[A-Z]{3}$/', $currency) || ($payment['action'] ?? '') !== 'INITIAL_PAYMENT') {
+            return ['status' => 'failed', 'error' => 'Alipay: payment currency unavailable; refund not sent'];
+        }
         $requestData = [
             'paymentId'       => $externalTransactionId,
             'refundRequestId' => $refundRequestId,
             'refundAmount'    => [
-                'value'    => (string) intval(round($amount * 100)),
-                'currency' => 'USD',
+                'value'    => (string) \LemurAse\Domain\ValueObjects\MinorUnits::toMinor($amount, $currency),
+                'currency' => $currency,
             ],
             'refundReason' => $reason,
         ];
@@ -241,7 +195,7 @@ final class AlipayAdapter implements PaymentGatewayInterface
         $signature = $this->signRequest('POST', $path, $jsonBody, $requestTime);
 
         try {
-            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
+            $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create(['base_uri' => self::BASE_URL]);
             $response = $client->post($path, [
                 'headers' => [
                     'Content-Type' => 'application/json',
@@ -287,7 +241,7 @@ final class AlipayAdapter implements PaymentGatewayInterface
         $signature = $this->signRequest('POST', $path, $jsonBody, $requestTime);
 
         try {
-            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
+            $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create(['base_uri' => self::BASE_URL]);
             $response = $client->post($path, [
                 'headers' => [
                     'Content-Type' => 'application/json',
@@ -307,7 +261,7 @@ final class AlipayAdapter implements PaymentGatewayInterface
                     'external_id'              => (string) ($data['paymentId'] ?? $externalId),
                     'external_subscription_id' => (string) ($data['paymentId'] ?? $externalId),
                     'external_transaction_id'  => (string) ($data['paymentId'] ?? $externalId),
-                    'amount'                   => (float) (($data['paymentAmount']['value'] ?? 0) / 100),
+                    'amount'                   => \LemurAse\Domain\ValueObjects\MinorUnits::fromMinor($data['paymentAmount']['value'] ?? 0, (string) ($data['paymentAmount']['currency'] ?? 'USD')),
                     'currency'                 => strtoupper($data['paymentAmount']['currency'] ?? 'USD'),
                     'external_client_id'       => $data['paymentRequestId'] ?? null,
                     'internal_order_id'        => $data['paymentRequestId'] ?? null,

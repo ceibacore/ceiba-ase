@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace LemurAse\WebhookManagement\Infrastructure\Adapters;
 
 use LemurAse\WebhookManagement\Domain\WebhookEvent;
+use LemurAse\Infrastructure\Payments\Alipay\AlipaySignature;
+use LemurAse\Domain\ValueObjects\MinorUnits;
 
 /**
  * Alipay Global (Antom) webhook adapter.
@@ -21,44 +23,18 @@ final class AlipayWebhookAdapter implements WebhookAdapterInterface
             throw new \Exception('Invalid JSON payload');
         }
 
-        // ── Verify RSA signature ─────────────────────────────────
-        $signatureHeader = $headers['signature']
-            ?? $headers['Signature']
-            ?? $headers['SIGNATURE']
-            ?? '';
-
-        if (empty($signatureHeader)) {
-            throw new \Exception('Missing Signature header');
-        }
-
-        $sigValue = '';
-        foreach (explode(',', $signatureHeader) as $part) {
-            $kv = explode('=', trim($part), 2);
-            if (count($kv) === 2 && $kv[0] === 'signature') {
-                $sigValue = $kv[1];
-                break;
-            }
-        }
-
-        if (empty($sigValue)) {
-            throw new \Exception('Invalid Signature header format');
-        }
-
-        $alipayPublicKey = $config['alipay_public_key']
-            ?? throw new \Exception('Missing alipay_public_key in config');
-
-        if (!str_contains($alipayPublicKey, '-----BEGIN')) {
-            $alipayPublicKey = "-----BEGIN PUBLIC KEY-----\n" . wordwrap($alipayPublicKey, 64, "\n", true) . "\n-----END PUBLIC KEY-----";
-        }
-
-        $clientId = $headers['client-id'] ?? $headers['Client-Id'] ?? $config['client_id'] ?? '';
-        $requestTime = $headers['request-time'] ?? $headers['Request-Time'] ?? '';
-
-        $content = sprintf("POST /webhooks/alipay\n%s.%s.%s", $clientId, $requestTime, $payload);
-        $decodedSig = base64_decode($sigValue, true);
-
-        if ($decodedSig === false || openssl_verify($content, $decodedSig, $alipayPublicKey, OPENSSL_ALGO_SHA256) !== 1) {
-            throw new \Exception('Alipay webhook RSA signature verification failed');
+        // ── Verify RSA signature and time window ────────────────
+        try {
+            AlipaySignature::verify(
+                $payload,
+                $headers,
+                (string) ($config['alipay_public_key'] ?? ''),
+                (string) ($config['client_id'] ?? ''),
+                (string) ($config['notify_path'] ?? AlipaySignature::DEFAULT_NOTIFY_PATH),
+                (int) ($config['signature_tolerance'] ?? AlipaySignature::DEFAULT_TOLERANCE)
+            );
+        } catch (\InvalidArgumentException $e) {
+            throw new \Exception($e->getMessage());
         }
 
         // ── Map action ───────────────────────────────────────────
@@ -73,12 +49,14 @@ final class AlipayWebhookAdapter implements WebhookAdapterInterface
         };
 
         $paymentAmount = $decoded['paymentAmount']['value'] ?? $decoded['refundAmount']['value'] ?? 0;
+        $currency = strtoupper((string) ($decoded['paymentAmount']['currency'] ?? $decoded['refundAmount']['currency'] ?? 'USD'));
 
         $normalizedData = [
             'external_subscription_id' => (string) ($decoded['paymentId'] ?? ''),
             'external_transaction_id'  => (string) ($decoded['paymentId'] ?? ''),
-            'amount'                   => (float) $paymentAmount / 100,
-            'currency'                 => strtoupper($decoded['paymentAmount']['currency'] ?? 'USD'),
+            // Antom amounts are in the currency's minor unit.
+            'amount'                   => MinorUnits::fromMinor($paymentAmount, $currency),
+            'currency'                 => $currency,
             'internal_order_id'        => $decoded['paymentRequestId'] ?? null,
             'external_client_id'       => $decoded['paymentRequestId'] ?? null,
             'raw_payload'              => $decoded,
@@ -87,7 +65,8 @@ final class AlipayWebhookAdapter implements WebhookAdapterInterface
         return new WebhookEvent(
             action:     $action,
             data:       $normalizedData,
-            externalId: (string) ($decoded['paymentId'] ?? 'alipay_unknown'),
+            // Payment and refund notifications share paymentId: key per notification type.
+            externalId: sprintf('alipay:%s:%s', $notifyType, (string) ($decoded['refundId'] ?? $decoded['paymentId'] ?? 'unknown')),
             provider:   'alipay',
             rawPayload: $decoded,
         );
