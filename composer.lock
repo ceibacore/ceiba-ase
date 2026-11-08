@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "51054a6e7249543f4e95edcd984f6f79",
+    "content-hash": "daf227dc8edfe0874f91f0e7e1725a7b",
     "packages": [
         {
             "name": "brick/math",
@@ -68,16 +68,16 @@
         },
         {
             "name": "ceibacore/ceiba-db",
-            "version": "v1.0.0",
+            "version": "v1.1.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/ceibacore/ceiba-db.git",
-                "reference": "4dcb73121a8452533a5e7fd9de8b2c737fdb80cc"
+                "reference": "d2ea5676cbd0c023edc32b718654cfe9210cc9b5"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/ceibacore/ceiba-db/zipball/4dcb73121a8452533a5e7fd9de8b2c737fdb80cc",
-                "reference": "4dcb73121a8452533a5e7fd9de8b2c737fdb80cc",
+                "url": "https://api.github.com/repos/ceibacore/ceiba-db/zipball/d2ea5676cbd0c023edc32b718654cfe9210cc9b5",
+                "reference": "d2ea5676cbd0c023edc32b718654cfe9210cc9b5",
                 "shasum": ""
             },
             "require": {
@@ -106,9 +106,9 @@
             "description": "CeibaDB — Lightweight PDO query builder and database abstraction layer for Ceiba Core ecosystem",
             "support": {
                 "issues": "https://github.com/ceibacore/ceiba-db/issues",
-                "source": "https://github.com/ceibacore/ceiba-db/tree/v1.0.0"
+                "source": "https://github.com/ceibacore/ceiba-db/tree/v1.1.0"
             },
-            "time": "2026-09-21T03:28:18+00:00"
+            "time": "2026-11-08T03:48:24+00:00"
         },
         {
             "name": "guzzlehttp/guzzle",
