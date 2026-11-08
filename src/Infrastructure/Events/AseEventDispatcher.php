@@ -107,6 +107,26 @@ final class AseEventDispatcher
     }
 
     /**
+     * Records the event in the outbox and then calls the in-memory listeners. Unlike
+     * dispatch(), an outbox failure is thrown: call it inside the business transaction so
+     * the event exists exactly when the write commits (used for payment events).
+     */
+    public static function dispatchReliably(string $event, array $payload, string $aggregateType, string $aggregateId): string
+    {
+        $eventId = self::recordOutbox($event, $payload, $aggregateType, $aggregateId);
+
+        foreach (self::$listeners[$event] ?? [] as $listener) {
+            try {
+                $listener($payload + ['outbox_event_id' => $eventId]);
+            } catch (\Throwable $e) {
+                error_log(sprintf("ASE Event Dispatcher Error in listener for '%s': %s", $event, $e->getMessage()));
+            }
+        }
+
+        return $eventId;
+    }
+
+    /**
      * Remove all listeners for a specific event or all events if none provided.
      */
     public static function forget(?string $event = null): void

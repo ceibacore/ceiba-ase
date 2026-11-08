@@ -14,6 +14,7 @@ final class TableNames
     public const TRANSACTIONS_LOG = 'transactions_log';
     public const CUSTOMERS = 'customers';
     public const OUTBOX_EVENTS = 'outbox_events';
+    public const PAYMENTS = 'payments';
 
     public static function all(): array
     {
@@ -27,6 +28,7 @@ final class TableNames
             self::INVOICES,
             self::TRANSACTIONS_LOG,
             self::OUTBOX_EVENTS,
+            self::PAYMENTS,
         ];
     }
 }

@@ -7,13 +7,19 @@ namespace LemurAse\Infrastructure\Payments;
 use LemurAse\Domain\Entities\Order;
 use LemurAse\Domain\Gateways\PaymentGatewayInterface;
 
-final class MockAdapter implements PaymentGatewayInterface
+final class MockAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface
 {
     public function __construct(
         private readonly bool $autoApprove = true
     ) {}
 
     public function createCheckoutSession(Order $order, string $successUrl, string $cancelUrl): array
+    {
+        return $this->createPaymentSession($order, $successUrl, $cancelUrl);
+    }
+
+    /** Plan orders and ceiba-ase payments share the checkout: the id travels as the order reference. */
+    public function createPaymentSession(\LemurAse\Domain\Gateways\Chargeable $order, string $successUrl, string $cancelUrl): array
     {
         $mockId = 'mock_sess_' . bin2hex(random_bytes(8));
         $redirectUrl = $this->autoApprove ? $successUrl : $cancelUrl;

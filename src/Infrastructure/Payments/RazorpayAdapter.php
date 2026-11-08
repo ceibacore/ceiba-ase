@@ -20,7 +20,7 @@ use LemurAse\Infrastructure\Payments\Razorpay\RazorpaySignature;
  * Webhooks: HMAC-SHA256 of the raw body with the dashboard webhook secret
  * (X-Razorpay-Signature). Subscribe to payment_link.paid and refund.processed.
  */
-final class RazorpayAdapter implements PaymentGatewayInterface
+final class RazorpayAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface
 {
     private readonly RazorpayClient $api;
 
@@ -34,6 +34,12 @@ final class RazorpayAdapter implements PaymentGatewayInterface
 
     public function createCheckoutSession(Order $order, string $successUrl, string $cancelUrl): array
     {
+        return $this->createPaymentSession($order, $successUrl, $cancelUrl);
+    }
+
+    /** Plan orders and ceiba-ase payments share the checkout: the id travels as the order reference. */
+    public function createPaymentSession(\LemurAse\Domain\Gateways\Chargeable $order, string $successUrl, string $cancelUrl): array
+    {
         $currency = strtoupper($order->amount()->currency()->toString());
         $orderId = $order->id()->uuid();
         $body = [
@@ -41,7 +47,7 @@ final class RazorpayAdapter implements PaymentGatewayInterface
             'currency'        => $currency,
             'accept_partial'  => false,
             'reference_id'    => $orderId,
-            'description'     => 'Order ' . $orderId,
+            'description'     => mb_substr($order->description(), 0, 2048),
             'notify'          => ['sms' => false, 'email' => false],
             'reminder_enable' => false,
             'callback_url'    => $successUrl,

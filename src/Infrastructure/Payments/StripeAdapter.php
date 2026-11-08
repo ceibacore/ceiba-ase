@@ -15,7 +15,7 @@ use LemurAse\Domain\Entities\PlanPrice;
  * SECURITY: Webhook signature verification is CRITICAL. All webhook events must be validated
  * against the Stripe webhook secret before processing.
  */
-final class StripeAdapter implements PaymentGatewayInterface
+final class StripeAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface
 {
     public function __construct(
         private readonly string $publishableKey,
@@ -131,6 +131,50 @@ final class StripeAdapter implements PaymentGatewayInterface
             'checkout_url' => $session->url,
             'external_id' => $session->id
         ];
+    }
+
+    /**
+     * One-time payment (ceiba-ase payments): Checkout in payment mode for the given amount.
+     *
+     * The stored customer mapping is not used: it belongs to the platform account, and
+     * payments may run on an academy's own account. The email comes from CustomerContacts.
+     * The payment id travels in the session and payment intent metadata (order_id), so
+     * checkout and refund events can be matched to it.
+     */
+    public function createPaymentSession(\LemurAse\Domain\Gateways\Chargeable $payment, string $successUrl, string $cancelUrl): array
+    {
+        \Stripe\Stripe::setApiKey($this->secretKey);
+
+        if (strpos($successUrl, '{CHECKOUT_SESSION_ID}') === false) {
+            $successUrl .= (strpos($successUrl, '?') !== false ? '&' : '?') . 'session_id={CHECKOUT_SESSION_ID}';
+        }
+        $currency = $payment->amount()->currency()->toString();
+        $metadata = ['order_id' => $payment->id()->uuid(), 'ase_context' => $payment->context()];
+
+        $params = [
+            'mode' => 'payment',
+            'line_items' => [[
+                'price_data' => [
+                    'currency' => strtolower($currency),
+                    'product_data' => ['name' => mb_substr($payment->description(), 0, 250)],
+                    'unit_amount' => \LemurAse\Domain\ValueObjects\MinorUnits::toMinor($payment->amount()->amount(), $currency),
+                ],
+                'quantity' => 1,
+            ]],
+            'client_reference_id' => $payment->externalClientId(),
+            'metadata' => $metadata,
+            'payment_intent_data' => ['metadata' => $metadata],
+            'success_url' => $successUrl,
+            'cancel_url' => $cancelUrl,
+        ];
+        $contact = \LemurAse\Infrastructure\Customers\CustomerContacts::find($payment->externalClientId());
+        if ($contact !== null) {
+            $params['customer_email'] = $contact['email'];
+        }
+
+        $session = \Stripe\Checkout\Session::create($params, ['idempotency_key' => 'ase-payment-' . $payment->id()->uuid()]);
+
+        return ['checkout_url' => (string) $session->url, 'external_id' => (string) $session->id];
     }
 
     /**

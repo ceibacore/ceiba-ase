@@ -17,7 +17,7 @@ use LemurAse\Domain\Entities\Order;
  *
  * Supported regions: China, Hong Kong, and international Alipay+ partners.
  */
-final class AlipayAdapter implements PaymentGatewayInterface
+final class AlipayAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface
 {
     private const BASE_URL = 'https://open-sea-global.alipay.com';
 
@@ -55,6 +55,12 @@ final class AlipayAdapter implements PaymentGatewayInterface
      */
     public function createCheckoutSession(Order $order, string $successUrl, string $cancelUrl): array
     {
+        return $this->createPaymentSession($order, $successUrl, $cancelUrl);
+    }
+
+    /** Plan orders and ceiba-ase payments share the checkout: the id travels as the order reference. */
+    public function createPaymentSession(\LemurAse\Domain\Gateways\Chargeable $order, string $successUrl, string $cancelUrl): array
+    {
         $path = '/ams/api/v1/payments/pay';
         $requestTime = (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d\TH:i:sP');
         $orderUuid = $order->id()->uuid();
@@ -62,7 +68,7 @@ final class AlipayAdapter implements PaymentGatewayInterface
         $amountCents = (string) \LemurAse\Domain\ValueObjects\MinorUnits::toMinor($order->amount()->amount(), $currency);
         // Antom posts the payment result to this URL and signs its path: it must be the
         // host's webhook endpoint (it used to be the success page, so no webhook arrived).
-        $notifyUrl = \LemurAse\Infrastructure\Http\WebhookUrls::for('alipay')
+        $notifyUrl = \LemurAse\Infrastructure\Http\WebhookUrls::for('alipay', $order->context(), $order->accountRef())
             ?? throw new \RuntimeException('Alipay: no webhook URL. Register WebhookUrls::resolveUsing() in the host application.');
 
         $requestData = [
@@ -70,7 +76,7 @@ final class AlipayAdapter implements PaymentGatewayInterface
             'paymentRequestId' => $orderUuid,
             'order' => [
                 'referenceOrderId' => $orderUuid,
-                'orderDescription' => 'Order ' . $orderUuid,
+                'orderDescription' => mb_substr($order->description(), 0, 250),
                 'orderAmount' => [
                     'value'    => $amountCents,
                     'currency' => $currency,

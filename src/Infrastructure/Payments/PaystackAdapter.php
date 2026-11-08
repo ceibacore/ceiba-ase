@@ -20,7 +20,7 @@ use LemurAse\Infrastructure\Payments\Paystack\PaystackSignature;
  * Webhooks: HMAC-SHA512 of the raw body with the secret key (x-paystack-signature).
  * Test or live mode follows the keys (sk_test_ / sk_live_).
  */
-final class PaystackAdapter implements PaymentGatewayInterface
+final class PaystackAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface
 {
     private readonly PaystackClient $api;
 
@@ -32,6 +32,12 @@ final class PaystackAdapter implements PaymentGatewayInterface
     }
 
     public function createCheckoutSession(Order $order, string $successUrl, string $cancelUrl): array
+    {
+        return $this->createPaymentSession($order, $successUrl, $cancelUrl);
+    }
+
+    /** Plan orders and ceiba-ase payments share the checkout: the id travels as the order reference. */
+    public function createPaymentSession(\LemurAse\Domain\Gateways\Chargeable $order, string $successUrl, string $cancelUrl): array
     {
         $currency = strtoupper($order->amount()->currency()->toString());
         $contact = CustomerContacts::require($order->externalClientId(), 'Paystack');
