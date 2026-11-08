@@ -48,8 +48,9 @@ final class WebhookManager
         $event = $adapter->parse($payload, $headers, $config);
 
         // 3. Inject gateway_id if available in config
+        // (WebhookEvent is readonly: assigning into $event->data threw for every webhook.)
         if (isset($config['gateway_id'])) {
-            $event->data['gateway_id'] = $config['gateway_id'];
+            $event = $event->withData(['gateway_id' => $config['gateway_id']]);
         }
 
         // 4. Execute core logic
