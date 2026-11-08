@@ -15,11 +15,16 @@ use LemurAse\Domain\Repositories\GatewayRepositoryInterface;
 use LemurAse\Domain\Services\BillingPeriodCalculator;
 use LemurAse\Shared\Infrastructure\LemurInstance;
 use LemurAse\WebhookManagement\Domain\WebhookEvent;
+use LemurAse\WebhookManagement\Domain\PaymentVerificationException;
+use LemurAse\Domain\ValueObjects\MinorUnits;
 use LemurAse\Application\UseCases\ProcessRefund;
 use LemurAse\Infrastructure\Events\AseEventDispatcher;
 
 final class ProcessWebhookUseCase
 {
+    /** Orders that may still receive a successful initial payment (a late payment still activates). */
+    private const PAYABLE_ORDER_STATUSES = ['pending', 'expired', 'failed'];
+
     public function __construct(
         private readonly OrderRepositoryInterface $orderRepo,
         private readonly SubscriptionRepositoryInterface $subRepo,
@@ -67,9 +72,21 @@ final class ProcessWebhookUseCase
 
     private function handleInitialPayment(array $data): void
     {
-        $orderId = EntityId::fromString($data['internal_order_id']);
+        if (empty($data['internal_order_id'])) {
+            throw new PaymentVerificationException('Initial payment event has no internal order reference.');
+        }
+        $orderId = EntityId::fromString((string) $data['internal_order_id']);
         $order = $this->orderRepo->findById($orderId);
         if (!$order) throw new \Exception("Order not found.");
+
+        // One activation per order: a second event for the same order (webhook plus manual
+        // verification, or two provider events) must not create another subscription.
+        if ($order->status() === 'paid') {
+            return;
+        }
+        if (!in_array($order->status(), self::PAYABLE_ORDER_STATUSES, true)) {
+            throw new PaymentVerificationException("Order {$orderId->uuid()} is {$order->status()}; payment not applied.");
+        }
 
         $planPrice = $this->planPriceRepo->findById($order->planPriceId());
         if (!$planPrice) throw new \Exception("PlanPrice not found.");
@@ -77,6 +94,8 @@ final class ProcessWebhookUseCase
         $plan = $this->planRepo->findById($planPrice->planId());
         if (!$plan) throw new \Exception("Plan not found.");
         $planSlug = $plan->slug();
+
+        $this->assertPaidAmountCoversOrder($order, $planPrice, $data);
 
         $order->markAsPaid();
         $this->orderRepo->save($order);
@@ -111,6 +130,32 @@ final class ProcessWebhookUseCase
             'plan_slug'          => $planSlug,
             'expires_at'         => $periodEnd,
         ]);
+    }
+
+    /**
+     * The provider must report the order currency and at least the order amount
+     * (compared in minor units). A trial may start with a zero amount.
+     */
+    private function assertPaidAmountCoversOrder($order, $planPrice, array $data): void
+    {
+        $expectedCurrency = strtoupper($order->amount()->currency()->toString());
+        $paidCurrency = strtoupper(trim((string) ($data['currency'] ?? '')));
+        if ($paidCurrency === '' || !array_key_exists('amount', $data) || !is_numeric($data['amount'])) {
+            throw new PaymentVerificationException('Payment event does not report amount and currency.');
+        }
+        if ($paidCurrency !== $expectedCurrency) {
+            throw new PaymentVerificationException("Paid currency {$paidCurrency} does not match order currency {$expectedCurrency}.");
+        }
+        $paid = MinorUnits::toMinor($data['amount'], $expectedCurrency);
+        $expected = MinorUnits::toMinor($order->amount()->amount(), $expectedCurrency);
+        $isTrialStart = $planPrice->trialDays() > 0 && $planPrice->type() === 'recurring' && $paid === 0;
+        if ($paid < $expected && !$isTrialStart) {
+            throw new PaymentVerificationException(sprintf(
+                'Paid amount %s %s is lower than the order amount %s %s.',
+                MinorUnits::format(MinorUnits::fromMinor($paid, $expectedCurrency), $expectedCurrency), $expectedCurrency,
+                MinorUnits::format($order->amount()->amount(), $expectedCurrency), $expectedCurrency
+            ));
+        }
     }
 
     private function handleRenewal(array $data): void

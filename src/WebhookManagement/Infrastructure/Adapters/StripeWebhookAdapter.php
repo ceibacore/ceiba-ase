@@ -3,12 +3,24 @@
 namespace LemurAse\WebhookManagement\Infrastructure\Adapters;
 
 use LemurAse\WebhookManagement\Domain\WebhookEvent;
+use LemurAse\Domain\ValueObjects\MinorUnits;
 
 final class StripeWebhookAdapter implements WebhookAdapterInterface
 {
     public function parse(string $payload, array $headers, array $config): WebhookEvent
     {
-        $sigHeader = $headers['stripe-signature'][0] ?? $headers['Stripe-Signature'][0] ?? (is_string($headers['stripe-signature'] ?? null) ? $headers['stripe-signature'] : (is_string($headers['Stripe-Signature'] ?? null) ? $headers['Stripe-Signature'] : null));
+        // Hosts pass headers either as strings or as arrays of values (Symfony/Laravel).
+        $sigHeader = null;
+        foreach (['stripe-signature', 'Stripe-Signature', 'STRIPE_SIGNATURE'] as $name) {
+            $value = $headers[$name] ?? null;
+            if (is_array($value)) {
+                $value = $value[0] ?? null;
+            }
+            if (is_string($value) && $value !== '') {
+                $sigHeader = $value;
+                break;
+            }
+        }
         
         if (!$sigHeader) {
             throw new \Exception("Missing stripe-signature header");
@@ -31,7 +43,7 @@ final class StripeWebhookAdapter implements WebhookAdapterInterface
         $type = $event['type'] ?? '';
         $data = $event['data']['object'] ?? [];
 
-        $action = $this->mapTypeToAction($type);
+        $action = $this->mapTypeToAction($type, $data);
         $normalizedData = $this->normalizeData($action, $data);
 
         return new WebhookEvent(
@@ -43,10 +55,15 @@ final class StripeWebhookAdapter implements WebhookAdapterInterface
         );
     }
 
-    private function mapTypeToAction(string $type): string
+    private function mapTypeToAction(string $type, array $data): string
     {
         return match ($type) {
-            'checkout.session.completed' => 'INITIAL_PAYMENT',
+            // A completed session may still be unpaid (asynchronous methods such as bank
+            // debits): only paid or no-payment-required (trial) sessions activate now.
+            'checkout.session.completed' => in_array($data['payment_status'] ?? '', ['paid', 'no_payment_required'], true)
+                ? 'INITIAL_PAYMENT' : 'UNKNOWN',
+            'checkout.session.async_payment_succeeded' => 'INITIAL_PAYMENT',
+            'checkout.session.async_payment_failed' => 'PAYMENT_FAILED',
             'invoice.payment_succeeded'  => 'RENEWAL_PAYMENT',
             'invoice.payment_failed'     => 'PAYMENT_FAILED',
             'customer.subscription.deleted' => 'SUBSCRIPTION_CANCELED',
@@ -62,13 +79,16 @@ final class StripeWebhookAdapter implements WebhookAdapterInterface
         $normalized = [
             'external_subscription_id' => $data['subscription'] ?? ($data['id'] ?? null),
             'external_transaction_id'  => $data['id'] ?? null,
-            'amount'                   => ($data['amount_paid'] ?? ($data['amount'] ?? 0)) / 100,
-            'currency'                 => $data['currency'] ?? 'usd',
+            // Checkout sessions report amount_total, invoices amount_paid, charges amount;
+            // all in the currency's minor unit.
+            'amount'                   => MinorUnits::fromMinor($data['amount_total'] ?? $data['amount_paid'] ?? $data['amount'] ?? 0, (string) ($data['currency'] ?? 'usd')),
+            'currency'                 => strtoupper((string) ($data['currency'] ?? 'usd')),
             'raw_payload'              => $data
         ];
 
         // Specific mappings for INITIAL_PAYMENT (from checkout session metadata)
         if ($action === 'INITIAL_PAYMENT') {
+            // Async payment events carry the session too, so metadata is still available.
             $normalized['internal_order_id'] = $data['metadata']['order_id'] ?? null;
             $normalized['external_client_id'] = $data['client_reference_id'] ?? null;
         }

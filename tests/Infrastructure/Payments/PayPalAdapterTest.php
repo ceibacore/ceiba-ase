@@ -129,11 +129,18 @@ class PayPalAdapterTest extends TestCase
 
         $normalized = $this->adapter->parseWebhookEvent($payload);
 
-        $this->assertEquals('INITIAL_PAYMENT', $normalized['action']);
-        $this->assertEquals('order_123', $normalized['external_order_id']);
-        $this->assertEquals('user_456', $normalized['external_client_id']);
-        $this->assertEquals(99.99, $normalized['amount']);
-        $this->assertEquals('USD', $normalized['currency']);
+        // Approval moves no money: only a completed capture counts as a payment.
+        $this->assertEquals('IGNORED', $normalized['action']);
+
+        $capture = $this->adapter->parseWebhookEvent([
+            'event_type' => 'PAYMENT.CAPTURE.COMPLETED',
+            'id' => 'evt_paypal_124',
+            'resource' => ['id' => 'cap_1', 'custom_id' => 'order-uuid', 'amount' => ['value' => '99.99', 'currency_code' => 'USD']],
+        ]);
+        $this->assertEquals('INITIAL_PAYMENT', $capture['action']);
+        $this->assertEquals('order-uuid', $capture['internal_order_id']);
+        $this->assertEquals(99.99, $capture['amount']);
+        $this->assertEquals('USD', $capture['currency']);
     }
 
     /**

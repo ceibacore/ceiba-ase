@@ -57,6 +57,12 @@ final class GatewayAdapterRegistry
         // Default Mock adapter
         if (!isset(self::$factories['mock'])) {
             self::register('mock', function (array $credentials = []): PaymentGatewayInterface {
+                // The mock approves every payment: never usable in production unless explicitly allowed.
+                $env = strtolower((string) (getenv('ASE_ENV') ?: getenv('APP_ENV') ?: ($_ENV['APP_ENV'] ?? '')));
+                $allowed = filter_var(getenv('ASE_ALLOW_MOCK_GATEWAY') ?: ($_ENV['ASE_ALLOW_MOCK_GATEWAY'] ?? 'false'), FILTER_VALIDATE_BOOLEAN);
+                if ($env === 'production' && !$allowed) {
+                    throw new \RuntimeException('The mock payment gateway is disabled in production.');
+                }
                 $autoApprove = (bool) ($credentials['auto_approve'] ?? true);
                 return new MockAdapter($autoApprove);
             });
