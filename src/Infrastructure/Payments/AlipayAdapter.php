@@ -17,7 +17,7 @@ use LemurAse\Domain\Entities\Order;
  *
  * Supported regions: China, Hong Kong, and international Alipay+ partners.
  */
-final class AlipayAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface
+final class AlipayAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface, \LemurAse\Domain\Gateways\CredentialProbeInterface
 {
     private const BASE_URL = 'https://open-sea-global.alipay.com';
 
@@ -300,5 +300,21 @@ final class AlipayAdapter implements PaymentGatewayInterface, \LemurAse\Domain\G
             'status' => 'failed',
             'error'  => 'Alipay Global does not support subscription pausing.',
         ];
+    }
+
+    /** Antom has no harmless authenticated call: both RSA keys are validated offline. */
+    public function probeCredentials(): array
+    {
+        $private = str_contains($this->privateKey, '-----BEGIN') ? $this->privateKey
+            : "-----BEGIN RSA PRIVATE KEY-----\n" . wordwrap($this->privateKey, 64, "\n", true) . "\n-----END RSA PRIVATE KEY-----";
+        $public = str_contains($this->alipayPublicKey, '-----BEGIN') ? $this->alipayPublicKey
+            : "-----BEGIN PUBLIC KEY-----\n" . wordwrap($this->alipayPublicKey, 64, "\n", true) . "\n-----END PUBLIC KEY-----";
+        if (!openssl_pkey_get_private($private)) {
+            return ['ok' => false, 'livemode' => null, 'message' => 'Alipay: la clave privada RSA no es válida.'];
+        }
+        if (!openssl_pkey_get_public($public)) {
+            return ['ok' => false, 'livemode' => null, 'message' => 'Alipay: la clave pública de Alipay no es válida.'];
+        }
+        return ['ok' => true, 'livemode' => !$this->sandbox, 'message' => 'Alipay: claves válidas (verificación local; Antom no ofrece una llamada de prueba).'];
     }
 }

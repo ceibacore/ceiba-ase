@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-11-08
+
+### Added
+- `AseManager::testGatewayCredentials($provider, $credentials)` and `CredentialProbeInterface`: hosts check credentials before enabling a gateway, for example an academy's own keys. Each built-in adapter makes a harmless call:
+
+  | Adapter | Check |
+  |---|---|
+  | Stripe | `GET /v1/balance` |
+  | PayPal | OAuth token |
+  | MercadoPago | `GET /users/me` |
+  | Paystack | `GET /balance` |
+  | Razorpay | `GET /v1/payments?count=1` |
+  | Alipay | RSA keys validated offline (Antom has no harmless call) |
+
+  The result reports `livemode` when known. Incomplete credentials fail without calling the provider.
+
 ## [1.5.0] - 2026-11-08
 
 One-time payments with a context, and gateways owned by accounts (an academy's own provider credentials).

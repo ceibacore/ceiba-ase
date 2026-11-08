@@ -33,6 +33,12 @@ final class PaystackClient
         return $this->request('GET', '/transaction/verify/' . rawurlencode($reference));
     }
 
+    /** GET /balance (credential check). */
+    public function balance(): array
+    {
+        return $this->request('GET', '/balance');
+    }
+
     /** POST /refund. @return array the refund */
     public function refund(array $body): array
     {

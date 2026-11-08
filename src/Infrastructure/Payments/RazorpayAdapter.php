@@ -20,7 +20,7 @@ use LemurAse\Infrastructure\Payments\Razorpay\RazorpaySignature;
  * Webhooks: HMAC-SHA256 of the raw body with the dashboard webhook secret
  * (X-Razorpay-Signature). Subscribe to payment_link.paid and refund.processed.
  */
-final class RazorpayAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface
+final class RazorpayAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface, \LemurAse\Domain\Gateways\CredentialProbeInterface
 {
     private readonly RazorpayClient $api;
 
@@ -152,5 +152,16 @@ final class RazorpayAdapter implements PaymentGatewayInterface, \LemurAse\Domain
             }
         }
         return null;
+    }
+
+    /** GET /v1/payments?count=1 with the key pair (the webhook secret cannot be checked remotely). */
+    public function probeCredentials(): array
+    {
+        try {
+            $this->api->listPayments(1);
+            return ['ok' => true, 'livemode' => str_starts_with($this->keyId, 'rzp_live_'), 'message' => 'Razorpay: credenciales válidas.'];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'livemode' => null, 'message' => $e->getMessage()];
+        }
     }
 }

@@ -16,7 +16,7 @@ use LemurAse\Domain\Entities\Order;
  *
  * Supported regions: Argentina, Brasil, México, Colombia, Chile, Uruguay, Perú.
  */
-final class MercadoPagoAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface
+final class MercadoPagoAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface, \LemurAse\Domain\Gateways\CredentialProbeInterface
 {
     private const BASE_URL = 'https://api.mercadopago.com';
 
@@ -288,6 +288,21 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface, \LemurAse\Dom
             return ['status' => 'success'];
         } catch (\Exception $e) {
             return ['status' => 'failed', 'error' => $e->getMessage()];
+        }
+    }
+
+    /** GET /users/me with the access token. */
+    public function probeCredentials(): array
+    {
+        try {
+            $response = \LemurAse\Infrastructure\Http\HttpClientFactory::create(['base_uri' => self::BASE_URL, 'http_errors' => false])
+                ->get('/users/me', ['headers' => ['Authorization' => 'Bearer ' . $this->accessToken]]);
+            if ($response->getStatusCode() !== 200) {
+                return ['ok' => false, 'livemode' => null, 'message' => 'MercadoPago: token rechazado (HTTP ' . $response->getStatusCode() . ').'];
+            }
+            return ['ok' => true, 'livemode' => !str_starts_with($this->accessToken, 'TEST-'), 'message' => 'MercadoPago: credenciales válidas.'];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'livemode' => null, 'message' => 'MercadoPago: ' . $e->getMessage()];
         }
     }
 }

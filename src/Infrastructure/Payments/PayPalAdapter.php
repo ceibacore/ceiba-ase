@@ -13,7 +13,7 @@ use LemurAse\Domain\Entities\Order;
  *
  * SECURITY: Webhook signature verification must use PayPal's certificate-based verification.
  */
-final class PayPalAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface
+final class PayPalAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface, \LemurAse\Domain\Gateways\CredentialProbeInterface
 {
     public function __construct(
         private readonly string $clientId,
@@ -338,5 +338,16 @@ final class PayPalAdapter implements PaymentGatewayInterface, \LemurAse\Domain\G
     public function pauseSubscription(string $externalId): array
     {
         return ['status' => 'failed', 'error' => 'PayPal subscription pausing not yet implemented.'];
+    }
+
+    /** OAuth token with client id and secret. */
+    public function probeCredentials(): array
+    {
+        try {
+            $this->getAccessToken();
+            return ['ok' => true, 'livemode' => !$this->sandbox, 'message' => 'PayPal: credenciales válidas.'];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'livemode' => null, 'message' => 'PayPal: ' . $e->getMessage()];
+        }
     }
 }

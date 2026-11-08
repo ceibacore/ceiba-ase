@@ -15,7 +15,7 @@ use LemurAse\Domain\Entities\PlanPrice;
  * SECURITY: Webhook signature verification is CRITICAL. All webhook events must be validated
  * against the Stripe webhook secret before processing.
  */
-final class StripeAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface
+final class StripeAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface, \LemurAse\Domain\Gateways\CredentialProbeInterface
 {
     public function __construct(
         private readonly string $publishableKey,
@@ -405,5 +405,16 @@ final class StripeAdapter implements PaymentGatewayInterface, \LemurAse\Domain\G
             'name'     => $name,
             'metadata' => ['user_id' => $userId],
         ])->id;
+    }
+
+    /** GET /v1/balance with the secret key. */
+    public function probeCredentials(): array
+    {
+        try {
+            $balance = \Stripe\Balance::retrieve(['api_key' => $this->secretKey]);
+            return ['ok' => true, 'livemode' => (bool) ($balance->livemode ?? false), 'message' => 'Stripe: credenciales válidas.'];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'livemode' => null, 'message' => 'Stripe: ' . $e->getMessage()];
+        }
     }
 }
