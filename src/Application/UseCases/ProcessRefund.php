@@ -54,6 +54,15 @@ final class ProcessRefund
 
         // Find the order by external transaction ID
         $order = $this->orderRepo->findByExternalTransactionId($externalTxId);
+        // Some providers refund a payment whose id differs from the order's external id
+        // (Razorpay: payment vs payment link); they report the order id instead.
+        if (!$order && !empty($webhookData['internal_order_id'])) {
+            try {
+                $order = $this->orderRepo->findById(EntityId::fromString((string) $webhookData['internal_order_id']));
+            } catch (\InvalidArgumentException) {
+                $order = null;
+            }
+        }
         if (!$order) {
             // Log this as a warning but don't fail
             error_log("Refund webhook received but no order found for transaction {$externalTxId}");
