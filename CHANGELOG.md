@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.3.1] - 2026-11-08
+
+### Fixed
+- `WebhookManager::handle()` assigned `gateway_id` into the readonly `WebhookEvent::$data`. Every webhook processed through it failed with an Error, because `getGatewayCredentialsByProvider()` always returns `gateway_id`. Affects all providers since the WebhookManagement module was introduced. `WebhookEvent::withData()` now returns an enriched copy.
+
 ## [1.3.0] - 2026-11-08
 
 ### Added
