@@ -856,16 +856,17 @@ final class AseManager
             if (empty($eventData['external_client_id'])) {
                 $eventData['external_client_id'] = $order->externalClientId();
             }
-            if (empty($eventData['amount'])) {
+            // Real providers must report what was charged so it can be checked against the
+            // order; only the Mock adapter (development) inherits the order amount.
+            if ($adapter instanceof \LemurAse\Infrastructure\Payments\MockAdapter) {
                 $eventData['amount'] = $order->amount()->amount();
-            }
-            if (empty($eventData['currency'])) {
-                $eventData['currency'] = $order->currency();
+                $eventData['currency'] = $order->amount()->currency()->toString();
             }
             $provider = match (true) {
                 $adapter instanceof \LemurAse\Infrastructure\Payments\StripeAdapter => 'stripe',
                 $adapter instanceof \LemurAse\Infrastructure\Payments\MockAdapter => 'mock',
                 $adapter instanceof \LemurAse\Infrastructure\Payments\MercadoPagoAdapter => 'mercadopago',
+                $adapter instanceof \LemurAse\Infrastructure\Payments\AlipayAdapter => 'alipay',
                 default => 'paypal',
             };
             return self::processEvent(
