@@ -58,7 +58,7 @@ final class PayPalWebhookAdapter implements WebhookAdapterInterface
 
         // Obtain OAuth Access Token
         $baseUri = $sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com';
-        $client = new \GuzzleHttp\Client(['base_uri' => $baseUri]);
+        $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => $baseUri]);
 
         try {
             $tokenRes = $client->post('/v1/oauth2/token', [

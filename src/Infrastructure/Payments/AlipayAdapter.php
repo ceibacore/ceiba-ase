@@ -110,7 +110,7 @@ final class AlipayAdapter implements PaymentGatewayInterface
         $jsonBody = json_encode($requestData, JSON_UNESCAPED_SLASHES);
         $signature = $this->signRequest('POST', $path, $jsonBody, $requestTime);
 
-        $client = new \GuzzleHttp\Client(['base_uri' => self::BASE_URL]);
+        $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
 
         try {
             $response = $client->post($path, [
@@ -241,7 +241,7 @@ final class AlipayAdapter implements PaymentGatewayInterface
         $signature = $this->signRequest('POST', $path, $jsonBody, $requestTime);
 
         try {
-            $client = new \GuzzleHttp\Client(['base_uri' => self::BASE_URL]);
+            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
             $response = $client->post($path, [
                 'headers' => [
                     'Content-Type' => 'application/json',
@@ -287,7 +287,7 @@ final class AlipayAdapter implements PaymentGatewayInterface
         $signature = $this->signRequest('POST', $path, $jsonBody, $requestTime);
 
         try {
-            $client = new \GuzzleHttp\Client(['base_uri' => self::BASE_URL]);
+            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
             $response = $client->post($path, [
                 'headers' => [
                     'Content-Type' => 'application/json',
