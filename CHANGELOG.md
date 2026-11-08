@@ -20,11 +20,15 @@ All notable changes to this project are documented here. The project follows [Se
 - Stripe customer lookup uses the exact-match `email` list filter instead of the Search query language, so a crafted email can never match another customer. The email is validated before calling Stripe.
 - Failures to read or store the Stripe customer mapping are logged instead of silently ignored (a missing mapping leads to duplicate customers).
 
+### Reliability
+- All outbound HTTP calls to PayPal, MercadoPago and Alipay use a 5 s connect timeout and a 20 s total timeout (`HttpDefaults`). Previously Guzzle waited indefinitely, so a degraded provider could hang checkouts and webhook workers.
+
 ### Known limitations
 - The outbox is best effort: events are written after the business write, outside its transaction, and a failed write is logged without interrupting the operation. See the `AseEventDispatcher` docblock.
+- PayPal webhook validation relies entirely on PayPal's verify API. There is no local pre-check of the certificate URL domain or of a replay window. Several existing tests named after those checks only passed because the fake credentials were rejected; they are now tagged `external`. Local pre-validation is planned.
 
 ### Tests
-- The default suite now runs the Unit, Infrastructure and Integration suites (165 tests, up from 9). Tests that call the live Stripe/PayPal APIs are tagged `external` and excluded by default.
+- The default suite now runs the Domain, Application, Unit, Infrastructure and Integration suites offline (148 tests, up from 9). The 24 tests that call the live Stripe/PayPal APIs are tagged `external` and excluded by default (`phpunit --group external` with real sandbox credentials).
 - New tests for the outbox writer and for the Stripe customer lookup, using an offline HTTP client.
 
 ## [1.0.2]

@@ -40,6 +40,8 @@ class PayPalAdapterTest extends TestCase
      * @test
      * Webhook validation: invalid cert URL domain fails
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testValidateWebhookWithInvalidCertDomain()
     {
         $payload = ['event_type' => 'CHECKOUT.ORDER.APPROVED'];
@@ -62,6 +64,8 @@ class PayPalAdapterTest extends TestCase
      * @test
      * Webhook validation: timestamp too old is rejected
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testValidateWebhookWithStaleTimestamp()
     {
         $oldTime = new \DateTimeImmutable('-10 minutes');
@@ -84,6 +88,8 @@ class PayPalAdapterTest extends TestCase
      * @test
      * Webhook validation: missing raw body fails
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testValidateWebhookWithMissingRawBody()
     {
         $payload = ['event_type' => 'CHECKOUT.ORDER.APPROVED'];
@@ -250,6 +256,8 @@ class PayPalAdapterTest extends TestCase
      * @test
      * Handle case-insensitive PayPal headers
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testValidateWebhookCaseInsensitiveHeaders()
     {
         $payload = ['event_type' => 'CHECKOUT.ORDER.APPROVED'];
@@ -275,6 +283,8 @@ class PayPalAdapterTest extends TestCase
      * @test
      * PayPal production domain validation (non-sandbox)
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testValidateWebhookProductionDomain()
     {
         $adapterProd = new PayPalAdapter($this->clientId, $this->clientSecret, $this->webhookId, false);
@@ -300,6 +310,8 @@ class PayPalAdapterTest extends TestCase
      * @test
      * Invalid transmission time format
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testValidateWebhookInvalidTimeFormat()
     {
         $payload = ['event_type' => 'CHECKOUT.ORDER.APPROVED'];

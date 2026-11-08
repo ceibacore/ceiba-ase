@@ -382,6 +382,8 @@ class StripeAdapterTest extends TestCase
     /**
      * Test refund successful
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testRefundSuccessful()
     {
         $adapter = new StripeAdapter(
@@ -401,6 +403,8 @@ class StripeAdapterTest extends TestCase
     /**
      * Test refund generates refund ID
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testRefundGeneratesRefundId()
     {
         $adapter = new StripeAdapter(

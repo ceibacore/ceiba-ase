@@ -89,6 +89,8 @@ class PayPalAdapterTest extends TestCase
     /**
      * Test validateWebhook with invalid cert URL domain fails
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testValidateWebhookWithInvalidCertUrlDomainFails()
     {
         $adapter = new PayPalAdapter(
@@ -115,6 +117,8 @@ class PayPalAdapterTest extends TestCase
     /**
      * Test validateWebhook with valid cert URL domain (api.paypal.com)
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testValidateWebhookWithValidCertUrlDomainApiPaypal()
     {
         $adapter = new PayPalAdapter(
@@ -143,6 +147,8 @@ class PayPalAdapterTest extends TestCase
     /**
      * Test validateWebhook with valid cert URL domain (api.sandbox.paypal.com)
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testValidateWebhookWithValidCertUrlDomainSandbox()
     {
         $adapter = new PayPalAdapter(
@@ -172,6 +178,8 @@ class PayPalAdapterTest extends TestCase
     /**
      * Test validateWebhook with timestamp too old fails
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testValidateWebhookWithOldTimestampFails()
     {
         $adapter = new PayPalAdapter(
@@ -199,6 +207,8 @@ class PayPalAdapterTest extends TestCase
     /**
      * Test validateWebhook with invalid transmission time format fails
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testValidateWebhookWithInvalidTimestampFormatFails()
     {
         $adapter = new PayPalAdapter(
@@ -291,6 +301,8 @@ class PayPalAdapterTest extends TestCase
     /**
      * Test refund successful
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testRefundSuccessful()
     {
         $adapter = new PayPalAdapter(
@@ -310,6 +322,8 @@ class PayPalAdapterTest extends TestCase
     /**
      * Test refund generates refund ID
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testRefundGeneratesRefundId()
     {
         $adapter = new PayPalAdapter(
@@ -331,6 +345,8 @@ class PayPalAdapterTest extends TestCase
     /**
      * Test validateWebhook with missing raw body fails
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testValidateWebhookWithMissingRawBodyFails()
     {
         $adapter = new PayPalAdapter(
@@ -357,6 +373,8 @@ class PayPalAdapterTest extends TestCase
     /**
      * Test validateWebhook with case-insensitive headers
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testValidateWebhookWithCaseInsensitiveHeaders()
     {
         $adapter = new PayPalAdapter(
