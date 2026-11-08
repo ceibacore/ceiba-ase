@@ -49,33 +49,24 @@ final class StripeAdapter implements PaymentGatewayInterface
         try {
             $stripeCustomerId = \LemurAse\AseManager::getGatewayCustomerId($userId, 'stripe');
         } catch (\Throwable $e) {
-            // Non-blocking in offline / test environments
+            error_log('StripeAdapter: stored customer lookup failed: ' . $e->getMessage());
         }
 
         if (!$stripeCustomerId && class_exists('App\Models\User')) {
             try {
                 $user = \App\Models\User::find($userId);
                 if ($user) {
-                    // 1. Search Stripe for existing customer with this email
-                    $search = \Stripe\Customer::search([
-                        'query' => "email:'" . $user->email . "'",
-                    ]);
-                    if (!empty($search->data)) {
-                        $stripeCustomerId = $search->data[0]->id;
-                    } else {
-                        // 2. Create customer if not found
-                        $customer = \Stripe\Customer::create([
-                            'email' => $user->email,
-                            'name' => trim(($user->name ?? '') . ' ' . ($user->last_name ?? '')),
-                            'metadata' => [
-                                'user_id' => $userId,
-                            ],
-                        ]);
-                        $stripeCustomerId = $customer->id;
-                    }
+                    $stripeCustomerId = self::findOrCreateCustomer(
+                        (string) $user->email,
+                        trim(($user->name ?? '') . ' ' . ($user->last_name ?? '')),
+                        (string) $userId,
+                    );
                     try {
                         \LemurAse\AseManager::saveGatewayCustomerId($userId, 'stripe', $stripeCustomerId);
-                    } catch (\Throwable) {}
+                    } catch (\Throwable $e) {
+                        // Not fatal for checkout, but a missing mapping causes duplicate customers: log it.
+                        error_log('StripeAdapter: could not store Stripe customer mapping: ' . $e->getMessage());
+                    }
                 }
             } catch (\Exception $e) {
                 error_log("Stripe customer creation/lookup failed: " . $e->getMessage());
@@ -339,5 +330,26 @@ final class StripeAdapter implements PaymentGatewayInterface
             return ['status' => 'failed', 'error' => $e->getMessage()];
         }
     }
-}
 
+    /**
+     * Returns the Stripe customer for this email, creating it when none exists.
+     *
+     * Uses the exact-match `email` list filter instead of the Search query language,
+     * so a crafted email (quotes, OR clauses) can never match another customer.
+     */
+    public static function findOrCreateCustomer(string $email, string $name, string $userId): string
+    {
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new \InvalidArgumentException('A valid customer email is required');
+        }
+        $existing = \Stripe\Customer::all(['email' => $email, 'limit' => 1]);
+        if (!empty($existing->data)) {
+            return $existing->data[0]->id;
+        }
+        return \Stripe\Customer::create([
+            'email'    => $email,
+            'name'     => $name,
+            'metadata' => ['user_id' => $userId],
+        ])->id;
+    }
+}

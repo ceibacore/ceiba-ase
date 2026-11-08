@@ -25,7 +25,7 @@ final class PayPalAdapter implements PaymentGatewayInterface
 
     private function getAccessToken(): string
     {
-        $client = new \GuzzleHttp\Client([
+        $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + [
             'base_uri' => $this->sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com',
         ]);
         $response = $client->post('/v1/oauth2/token', [
@@ -46,7 +46,7 @@ final class PayPalAdapter implements PaymentGatewayInterface
     public function createCheckoutSession(Order $order, string $successUrl, string $cancelUrl): array
     {
         $token = $this->getAccessToken();
-        $client = new \GuzzleHttp\Client([
+        $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + [
             'base_uri' => $this->sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com',
         ]);
 
@@ -130,7 +130,7 @@ final class PayPalAdapter implements PaymentGatewayInterface
 
         try {
             $token = $this->getAccessToken();
-            $client = new \GuzzleHttp\Client([
+            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + [
                 'base_uri' => $this->sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com',
             ]);
 
@@ -215,7 +215,7 @@ final class PayPalAdapter implements PaymentGatewayInterface
     {
         try {
             $token = $this->getAccessToken();
-            $client = new \GuzzleHttp\Client([
+            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + [
                 'base_uri' => $this->sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com',
             ]);
 
@@ -254,7 +254,7 @@ final class PayPalAdapter implements PaymentGatewayInterface
     {
         try {
             $token = $this->getAccessToken();
-            $client = new \GuzzleHttp\Client([
+            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + [
                 'base_uri' => $this->sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com',
             ]);
 

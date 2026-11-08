@@ -3,6 +3,7 @@
 namespace LemurAse\Tests\Infrastructure\Payments;
 
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\Group;
 use LemurAse\Infrastructure\Payments\StripeAdapter;
 use LemurAse\Domain\Entities\Order;
 
@@ -230,6 +231,8 @@ class StripeAdapterTest extends TestCase
      * @test
      * Refund API call success
      */
+    /** Calls the live provider API; needs real sandbox credentials. */
+    #[Group('external')]
     public function testRefundSuccess()
     {
         $result = $this->adapter->refund('ch_test_123', 50.00, 'Customer request');
@@ -243,6 +246,8 @@ class StripeAdapterTest extends TestCase
      * @test
      * Refund error handling
      */
+    /** Calls the live provider API; needs real sandbox credentials. */
+    #[Group('external')]
     public function testRefundErrorHandling()
     {
         // The current mock always succeeds, but here's the contract test
