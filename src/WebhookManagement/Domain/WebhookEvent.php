@@ -14,4 +14,10 @@ final class WebhookEvent
         public readonly string $provider,        // 'stripe', 'paypal', etc.
         public readonly array $rawPayload        // Original JSON from provider
     ) {}
+
+    /** A copy with extra normalized fields (the event itself is immutable). */
+    public function withData(array $extra): self
+    {
+        return new self($this->action, array_merge($this->data, $extra), $this->externalId, $this->provider, $this->rawPayload);
+    }
 }
