@@ -10,9 +10,13 @@ use Ramsey\Uuid\Uuid;
 
 /**
  * Domain Event Dispatcher & Outbox Writer for the Agnostic Subscription Engine.
- * 
- * Persists domain events into the transactional Outbox (`ase_outbox_events`)
- * and bridges them to host application listeners in memory.
+ *
+ * Records each event in `ase_outbox_events` and then calls in-memory listeners.
+ *
+ * Delivery guarantee: best effort. The outbox row is written on the ASE connection
+ * after the business write, not inside the same transaction, and a failed write is
+ * logged without interrupting the operation. Consumers that need exactly the events
+ * of committed writes must read the outbox and tolerate missing or duplicate events.
  */
 final class AseEventDispatcher
 {
@@ -38,7 +42,7 @@ final class AseEventDispatcher
      */
     public static function dispatch(string $event, mixed $payload = null, ?string $aggregateType = null, ?string $aggregateId = null): void
     {
-        // 1. Persist to outbox table for at-least-once transactional guarantee
+        // 1. Persist to the outbox (best effort; see class docblock)
         try {
             self::recordOutbox($event, $payload, $aggregateType, $aggregateId);
         } catch (\Throwable $e) {
