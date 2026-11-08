@@ -3,6 +3,7 @@
 namespace LemurAse\Tests\Infrastructure\Payments;
 
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\Group;
 use LemurAse\Infrastructure\Payments\PayPalAdapter;
 
 class PayPalAdapterTest extends TestCase
@@ -234,6 +235,8 @@ class PayPalAdapterTest extends TestCase
      * @test
      * Refund API call success
      */
+    /** Calls the live provider API; needs real sandbox credentials. */
+    #[Group('external')]
     public function testRefundSuccess()
     {
         $result = $this->adapter->refund('capture_123', 49.99, 'Customer request');
