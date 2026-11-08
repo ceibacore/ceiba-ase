@@ -60,6 +60,10 @@ final class AlipayAdapter implements PaymentGatewayInterface
         $orderUuid = $order->id()->uuid();
         $currency = strtoupper($order->amount()->currency()->toString());
         $amountCents = (string) \LemurAse\Domain\ValueObjects\MinorUnits::toMinor($order->amount()->amount(), $currency);
+        // Antom posts the payment result to this URL and signs its path: it must be the
+        // host's webhook endpoint (it used to be the success page, so no webhook arrived).
+        $notifyUrl = \LemurAse\Infrastructure\Http\WebhookUrls::for('alipay')
+            ?? throw new \RuntimeException('Alipay: no webhook URL. Register WebhookUrls::resolveUsing() in the host application.');
 
         $requestData = [
             'productCode'      => 'CASHIER_PAYMENT',
@@ -80,7 +84,7 @@ final class AlipayAdapter implements PaymentGatewayInterface
                 'currency' => $currency,
             ],
             'paymentRedirectUrl' => $successUrl,
-            'paymentNotifyUrl'   => $successUrl . '?webhook=alipay',
+            'paymentNotifyUrl'   => $notifyUrl,
         ];
 
         $jsonBody = json_encode($requestData, JSON_UNESCAPED_SLASHES);
@@ -123,7 +127,8 @@ final class AlipayAdapter implements PaymentGatewayInterface
         // The signature covers the exact raw body; re-encoding the decoded payload is a fallback.
         $rawBody = $headers['X-RAW-BODY'] ?? json_encode($payload, JSON_UNESCAPED_SLASHES);
         try {
-            Alipay\AlipaySignature::verify((string) $rawBody, $headers, $this->alipayPublicKey, $this->clientId);
+            Alipay\AlipaySignature::verify((string) $rawBody, $headers, $this->alipayPublicKey, $this->clientId,
+                \LemurAse\Infrastructure\Http\WebhookUrls::pathFor('alipay') ?? Alipay\AlipaySignature::DEFAULT_NOTIFY_PATH);
             return true;
         } catch (\InvalidArgumentException $e) {
             error_log('Alipay: ' . $e->getMessage());

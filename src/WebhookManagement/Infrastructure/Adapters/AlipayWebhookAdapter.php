@@ -7,6 +7,8 @@ namespace LemurAse\WebhookManagement\Infrastructure\Adapters;
 use LemurAse\WebhookManagement\Domain\WebhookEvent;
 use LemurAse\Infrastructure\Payments\Alipay\AlipaySignature;
 use LemurAse\Domain\ValueObjects\MinorUnits;
+use LemurAse\Infrastructure\Http\WebhookUrls;
+use LemurAse\WebhookManagement\Domain\WebhookSignatureException;
 
 /**
  * Alipay Global (Antom) webhook adapter.
@@ -30,11 +32,11 @@ final class AlipayWebhookAdapter implements WebhookAdapterInterface
                 $headers,
                 (string) ($config['alipay_public_key'] ?? ''),
                 (string) ($config['client_id'] ?? ''),
-                (string) ($config['notify_path'] ?? AlipaySignature::DEFAULT_NOTIFY_PATH),
+                self::notifyPath($config),
                 (int) ($config['signature_tolerance'] ?? AlipaySignature::DEFAULT_TOLERANCE)
             );
         } catch (\InvalidArgumentException $e) {
-            throw new \Exception($e->getMessage());
+            throw new WebhookSignatureException($e->getMessage(), 0, $e);
         }
 
         // ── Map action ───────────────────────────────────────────
@@ -70,5 +72,18 @@ final class AlipayWebhookAdapter implements WebhookAdapterInterface
             provider:   'alipay',
             rawPayload: $decoded,
         );
+    }
+
+    /**
+     * Antom signs "POST {path}" of the URL it was told to notify. That URL comes from
+     * WebhookUrls (the same one sent at checkout); an explicit notify_path credential wins.
+     */
+    private static function notifyPath(array $config): string
+    {
+        $configured = trim((string) ($config['notify_path'] ?? ''));
+        if ($configured !== '') {
+            return $configured;
+        }
+        return WebhookUrls::pathFor('alipay') ?? AlipaySignature::DEFAULT_NOTIFY_PATH;
     }
 }
