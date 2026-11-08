@@ -11,11 +11,25 @@
         <testsuite name="Application">
             <directory>tests/Application</directory>
         </testsuite>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Infrastructure">
+            <directory>tests/Infrastructure</directory>
+        </testsuite>
+        <testsuite name="Integration">
+            <directory>tests/Integration</directory>
+        </testsuite>
     </testsuites>
+    <groups>
+        <!-- Tests that call live Stripe/PayPal APIs; run them explicitly with the "external" group. -->
+        <exclude>
+            <group>external</group>
+        </exclude>
+    </groups>
     <coverage>
         <include>
-            <directory suffix=".php">src/Domain</directory>
-            <directory suffix=".php">src/Application</directory>
+            <directory suffix=".php">src</directory>
         </include>
     </coverage>
 </phpunit>

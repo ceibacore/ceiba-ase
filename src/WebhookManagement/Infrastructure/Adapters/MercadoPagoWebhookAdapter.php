@@ -84,7 +84,7 @@ final class MercadoPagoWebhookAdapter implements WebhookAdapterInterface
             ?? throw new \Exception('Missing access_token in config');
 
         try {
-            $client = new \GuzzleHttp\Client([
+            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + [
                 'base_uri' => 'https://api.mercadopago.com',
             ]);
             $response = $client->get("/v1/payments/{$dataId}", [

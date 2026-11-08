@@ -850,8 +850,26 @@ final class AseManager
 
         if (($eventData['action'] ?? '') === 'INITIAL_PAYMENT') {
             $eventData['gateway_id'] = $order->gatewayId()->uuid();
+            if (empty($eventData['internal_order_id'])) {
+                $eventData['internal_order_id'] = $order->id()->uuid();
+            }
+            if (empty($eventData['external_client_id'])) {
+                $eventData['external_client_id'] = $order->externalClientId();
+            }
+            if (empty($eventData['amount'])) {
+                $eventData['amount'] = $order->amount()->amount();
+            }
+            if (empty($eventData['currency'])) {
+                $eventData['currency'] = $order->currency();
+            }
+            $provider = match (true) {
+                $adapter instanceof \LemurAse\Infrastructure\Payments\StripeAdapter => 'stripe',
+                $adapter instanceof \LemurAse\Infrastructure\Payments\MockAdapter => 'mock',
+                $adapter instanceof \LemurAse\Infrastructure\Payments\MercadoPagoAdapter => 'mercadopago',
+                default => 'paypal',
+            };
             return self::processEvent(
-                $adapter instanceof \LemurAse\Infrastructure\Payments\StripeAdapter ? 'stripe' : 'paypal',
+                $provider,
                 'INITIAL_PAYMENT',
                 $eventData,
                 $eventData['external_id'] ?? $order->externalOrderId()

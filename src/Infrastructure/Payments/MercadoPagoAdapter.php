@@ -38,7 +38,7 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface
      */
     public function createCheckoutSession(Order $order, string $successUrl, string $cancelUrl): array
     {
-        $client = new \GuzzleHttp\Client(['base_uri' => self::BASE_URL]);
+        $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
 
         $response = $client->post('/checkout/preferences', [
             'headers' => [
@@ -153,7 +153,7 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface
 
         // Fetch full payment details from MP API
         try {
-            $client = new \GuzzleHttp\Client(['base_uri' => self::BASE_URL]);
+            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
             $response = $client->get("/v1/payments/{$dataId}", [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $this->accessToken,
@@ -207,7 +207,7 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface
     public function refund(string $externalTransactionId, float $amount, string $reason): array
     {
         try {
-            $client = new \GuzzleHttp\Client(['base_uri' => self::BASE_URL]);
+            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
 
             $options = [
                 'headers' => [
@@ -243,7 +243,7 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface
     public function verifyTransaction(string $externalId): array
     {
         try {
-            $client = new \GuzzleHttp\Client(['base_uri' => self::BASE_URL]);
+            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
             $response = $client->get("/v1/payments/{$externalId}", [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $this->accessToken,
@@ -278,7 +278,7 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface
     public function cancelSubscription(string $externalId, bool $atPeriodEnd = true): array
     {
         try {
-            $client = new \GuzzleHttp\Client(['base_uri' => self::BASE_URL]);
+            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
             $client->put("/preapproval/{$externalId}", [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $this->accessToken,
@@ -299,7 +299,7 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface
     public function pauseSubscription(string $externalId): array
     {
         try {
-            $client = new \GuzzleHttp\Client(['base_uri' => self::BASE_URL]);
+            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
             $client->put("/preapproval/{$externalId}", [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $this->accessToken,

@@ -4,3 +4,10 @@ vendor/
 docs/
 .ia/
 .env
+.env.*
+!.env.example
+*.key
+*.pem
+*.sqlite
+*.db
+.agents/

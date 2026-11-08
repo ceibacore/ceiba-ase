@@ -3,6 +3,7 @@
 namespace LemurAse\Tests\Unit\Infrastructure\Payments;
 
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\Group;
 use LemurAse\Infrastructure\Payments\StripeAdapter;
 use LemurAse\Domain\Entities\Order;
 use LemurAse\Domain\ValueObjects\EntityId;
@@ -18,6 +19,8 @@ class StripeAdapterTest extends TestCase
     /**
      * Test createCheckoutSession with trial days
      */
+    /** Calls the live provider API; needs real sandbox credentials. */
+    #[Group('external')]
     public function testCreateCheckoutSessionWithTrialDays()
     {
         $adapter = new StripeAdapter(
@@ -40,6 +43,8 @@ class StripeAdapterTest extends TestCase
     /**
      * Test createCheckoutSession without trial days
      */
+    /** Calls the live provider API; needs real sandbox credentials. */
+    #[Group('external')]
     public function testCreateCheckoutSessionWithoutTrialDays()
     {
         $adapter = new StripeAdapter(
@@ -377,6 +382,8 @@ class StripeAdapterTest extends TestCase
     /**
      * Test refund successful
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testRefundSuccessful()
     {
         $adapter = new StripeAdapter(
@@ -396,6 +403,8 @@ class StripeAdapterTest extends TestCase
     /**
      * Test refund generates refund ID
      */
+    /** Calls the live provider API (PayPal verifies signatures remotely); needs real sandbox credentials. */
+    #[Group('external')]
     public function testRefundGeneratesRefundId()
     {
         $adapter = new StripeAdapter(
