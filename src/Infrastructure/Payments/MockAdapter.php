@@ -7,7 +7,7 @@ namespace LemurAse\Infrastructure\Payments;
 use LemurAse\Domain\Entities\Order;
 use LemurAse\Domain\Gateways\PaymentGatewayInterface;
 
-final class MockAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface
+final class MockAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface, \LemurAse\Domain\Gateways\CredentialProbeInterface
 {
     public function __construct(
         private readonly bool $autoApprove = true
@@ -93,5 +93,10 @@ final class MockAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gat
     public function pauseSubscription(string $externalId): array
     {
         return ['status' => 'success'];
+    }
+
+    public function probeCredentials(): array
+    {
+        return ['ok' => true, 'livemode' => false, 'message' => 'Mock: siempre disponible (solo desarrollo).'];
     }
 }

@@ -966,6 +966,26 @@ final class AseManager
     }
 
     /**
+     * Checks credentials with a harmless call to the provider before they are enabled.
+     * Credentials that cannot even build an adapter (missing fields) fail here too.
+     *
+     * @return array{ok: bool, livemode: ?bool, message: string}
+     */
+    public static function testGatewayCredentials(string $provider, array $credentials): array
+    {
+        try {
+            $adapter = GatewayAdapterRegistry::make($provider, $credentials);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'livemode' => null, 'message' => $e->getMessage()];
+        }
+        if (!$adapter instanceof \LemurAse\Domain\Gateways\CredentialProbeInterface) {
+            return ['ok' => false, 'livemode' => null, 'message' => "Gateway '{$provider}' cannot test its credentials."];
+        }
+
+        return $adapter->probeCredentials();
+    }
+
+    /**
      * Gateways of an account (an academy's own credentials). Credentials are returned for
      * the host's configuration form only.
      *

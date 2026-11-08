@@ -20,7 +20,7 @@ use LemurAse\Infrastructure\Payments\Paystack\PaystackSignature;
  * Webhooks: HMAC-SHA512 of the raw body with the secret key (x-paystack-signature).
  * Test or live mode follows the keys (sk_test_ / sk_live_).
  */
-final class PaystackAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface
+final class PaystackAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface, \LemurAse\Domain\Gateways\CredentialProbeInterface
 {
     private readonly PaystackClient $api;
 
@@ -132,5 +132,16 @@ final class PaystackAdapter implements PaymentGatewayInterface, \LemurAse\Domain
     public function publicKey(): string
     {
         return $this->publicKey;
+    }
+
+    /** GET /balance with the secret key. */
+    public function probeCredentials(): array
+    {
+        try {
+            $this->api->balance();
+            return ['ok' => true, 'livemode' => str_starts_with($this->secretKey, 'sk_live_'), 'message' => 'Paystack: credenciales válidas.'];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'livemode' => null, 'message' => $e->getMessage()];
+        }
     }
 }

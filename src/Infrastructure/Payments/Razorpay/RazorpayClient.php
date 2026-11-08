@@ -23,6 +23,12 @@ final class RazorpayClient
         return $this->request('POST', '/v1/payment_links', $body);
     }
 
+    /** GET /v1/payments (credential check). */
+    public function listPayments(int $count = 1): array
+    {
+        return $this->request('GET', '/v1/payments?count=' . max(1, min(100, $count)));
+    }
+
     public function paymentLink(string $id): array
     {
         return $this->request('GET', '/v1/payment_links/' . self::safe($id));
