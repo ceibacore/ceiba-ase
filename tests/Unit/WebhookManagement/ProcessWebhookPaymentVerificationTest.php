@@ -46,6 +46,8 @@ final class ProcessWebhookPaymentVerificationTest extends TestCase
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $pdo->exec('CREATE TABLE ase_outbox_events (id TEXT PRIMARY KEY, event_name TEXT, aggregate_type TEXT, aggregate_id TEXT,
             payload TEXT, status TEXT, attempts INTEGER, error_message TEXT, published_at TEXT, created_at TEXT, updated_at TEXT)');
+        $pdo->exec('CREATE TABLE ase_transactions_log (id TEXT PRIMARY KEY, short_id TEXT, external_client_id TEXT, gateway_id TEXT,
+            external_transaction_id TEXT, type TEXT, amount REAL, status TEXT, security_hash TEXT, raw_payload TEXT, created_at TEXT)');
         $this->pdo = $pdo;
         CeibaDB::setInstance($pdo, ['prefix' => 'ase_']);
         $this->previousLog = ini_set('error_log', '/dev/null') ?: null;
@@ -132,6 +134,45 @@ final class ProcessWebhookPaymentVerificationTest extends TestCase
         $trial = $this->order(20.00, 'USD', 'pending', 14);
         $this->assertTrue($this->pay($trial, 0, 'USD', 'evt-trial'));
         $this->assertSame('trialing', array_values($this->store->subscriptions)[1]->status());
+    }
+
+    public function testSignedPaystackChargeActivatesTheOrderOnlyWhenFullyPaid(): void
+    {
+        $secret = 'sk_test_paystack_e2e_secret';
+        $event = function (Order $order, int $kobo, string $id) use ($secret) {
+            $raw = json_encode(['event' => 'charge.success', 'data' => [
+                'id' => $id, 'status' => 'success', 'reference' => "ase-{$id}", 'amount' => $kobo, 'currency' => 'NGN',
+                'metadata' => ['order_id' => $order->id()->uuid(), 'external_client_id' => 'client-1'],
+            ]]);
+            return (new \LemurAse\WebhookManagement\Infrastructure\Adapters\PaystackWebhookAdapter())
+                ->parse($raw, ['x-paystack-signature' => [hash_hmac('sha512', $raw, $secret)]], ['secret_key' => $secret]);
+        };
+        $useCase = new ProcessWebhookUseCase(...$this->store->repositories());
+
+        $order = $this->order(15000.00, 'NGN');
+        $this->assertRejected(fn () => $useCase->execute($event($order, 1499999, 'short')), 'one kobo short');
+        $this->assertTrue($useCase->execute($event($order, 1500000, 'full')));
+        $this->assertSame('paid', $order->status());
+        $this->assertCount(1, $this->store->subscriptions);
+    }
+
+    public function testRazorpayRefundFindsTheOrderThroughItsReference(): void
+    {
+        $order = $this->order(1499.00, 'INR', 'paid');
+        $secret = 'razorpay-webhook-e2e-secret';
+        $raw = json_encode(['event' => 'refund.processed', 'payload' => [
+            'refund'  => ['entity' => ['id' => 'rfnd_9', 'payment_id' => 'pay_9', 'amount' => 149900, 'currency' => 'INR',
+                'notes' => ['order_id' => $order->id()->uuid()]]],
+            'payment' => ['entity' => ['id' => 'pay_9', 'amount' => 149900, 'amount_refunded' => 149900, 'currency' => 'INR']],
+        ]]);
+        $event = (new \LemurAse\WebhookManagement\Infrastructure\Adapters\RazorpayWebhookAdapter())->parse($raw,
+            ['x-razorpay-signature' => hash_hmac('sha256', $raw, $secret), 'x-razorpay-event-id' => 'evt_r9'], ['webhook_secret' => $secret]);
+
+        // The order's external id is the payment link, not pay_9: the refund is matched by order id.
+        $this->assertTrue((new ProcessWebhookUseCase(...$this->store->repositories()))->execute($event));
+        $this->assertSame('refunded', $order->status());
+        $this->assertSame(['razorpay:refund:rfnd_9'],
+            $this->pdo->query("SELECT external_transaction_id FROM ase_transactions_log WHERE type = 'refund'")->fetchAll(PDO::FETCH_COLUMN));
     }
 
     public function testFinalOrdersAreNotReactivatedButLatePaymentsActivate(): void

@@ -8,6 +8,8 @@ use LemurAse\WebhookManagement\Infrastructure\Adapters\StripeWebhookAdapter;
 use LemurAse\WebhookManagement\Infrastructure\Adapters\PayPalWebhookAdapter;
 use LemurAse\WebhookManagement\Infrastructure\Adapters\MercadoPagoWebhookAdapter;
 use LemurAse\WebhookManagement\Infrastructure\Adapters\AlipayWebhookAdapter;
+use LemurAse\WebhookManagement\Infrastructure\Adapters\PaystackWebhookAdapter;
+use LemurAse\WebhookManagement\Infrastructure\Adapters\RazorpayWebhookAdapter;
 use LemurAse\WebhookManagement\Infrastructure\Adapters\WebhookAdapterInterface;
 
 final class WebhookManager
@@ -17,6 +19,8 @@ final class WebhookManager
         'paypal'      => PayPalWebhookAdapter::class,
         'mercadopago' => MercadoPagoWebhookAdapter::class,
         'alipay'      => AlipayWebhookAdapter::class,
+        'paystack'    => PaystackWebhookAdapter::class,
+        'razorpay'    => RazorpayWebhookAdapter::class,
     ];
 
     /**

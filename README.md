@@ -11,7 +11,7 @@
 **ASE** solves the recurring problem of rebuilding subscription logic from scratch every time a new SaaS or LMS product is launched. It provides a standardized, portable billing layer that:
 
 - ✅ Works with **any PHP >= 8.1** project as a "copy-and-drop" module
-- ✅ Supports **multiple payment gateways** (Stripe, PayPal, MercadoPago) via adapters with dynamic selection
+- ✅ Supports **multiple payment gateways** (Stripe, PayPal, MercadoPago, Alipay, Paystack, Razorpay) via adapters with dynamic selection
 - ✅ Handles the **full order lifecycle**: checkout → payment → subscription → invoice → audit log
 - ✅ Enforces **security by design**: HMAC-SHA256 (Stripe) + RSA-SHA256 (PayPal) webhook validation
 - ✅ Guarantees **idempotent webhook processing** — no duplicate charges or subscriptions

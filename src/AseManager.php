@@ -867,6 +867,8 @@ final class AseManager
                 $adapter instanceof \LemurAse\Infrastructure\Payments\MockAdapter => 'mock',
                 $adapter instanceof \LemurAse\Infrastructure\Payments\MercadoPagoAdapter => 'mercadopago',
                 $adapter instanceof \LemurAse\Infrastructure\Payments\AlipayAdapter => 'alipay',
+                $adapter instanceof \LemurAse\Infrastructure\Payments\PaystackAdapter => 'paystack',
+                $adapter instanceof \LemurAse\Infrastructure\Payments\RazorpayAdapter => 'razorpay',
                 default => 'paypal',
             };
             return self::processEvent(

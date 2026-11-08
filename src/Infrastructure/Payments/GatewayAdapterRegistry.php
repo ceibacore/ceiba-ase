@@ -94,6 +94,28 @@ final class GatewayAdapterRegistry
                 return new AlipayAdapter($clientId, $privateKey, $alipayPubKey, $merchantId, $sandbox);
             });
         }
+
+        // Default Paystack adapter (webhooks are signed with the secret key)
+        if (!isset(self::$factories['paystack'])) {
+            self::register('paystack', function (array $credentials): PaymentGatewayInterface {
+                $secretKey = $credentials['secret_key'] ?? throw new \RuntimeException("Paystack credential 'secret_key' missing.");
+                $publicKey = $credentials['public_key'] ?? throw new \RuntimeException("Paystack credential 'public_key' missing.");
+
+                return new PaystackAdapter((string) $secretKey, (string) $publicKey);
+            });
+        }
+
+        // Default Razorpay adapter (Payment Links)
+        if (!isset(self::$factories['razorpay'])) {
+            self::register('razorpay', function (array $credentials): PaymentGatewayInterface {
+                $keyId         = $credentials['key_id']         ?? throw new \RuntimeException("Razorpay credential 'key_id' missing.");
+                $keySecret     = $credentials['key_secret']     ?? throw new \RuntimeException("Razorpay credential 'key_secret' missing.");
+                $webhookSecret = $credentials['webhook_secret'] ?? throw new \RuntimeException("Razorpay credential 'webhook_secret' missing.");
+
+                return new RazorpayAdapter((string) $keyId, (string) $keySecret, (string) $webhookSecret);
+            });
+        }
+
         self::$booted = true;
     }
 

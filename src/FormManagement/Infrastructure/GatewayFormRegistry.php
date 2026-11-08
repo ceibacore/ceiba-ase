@@ -10,6 +10,8 @@ use LemurAse\FormManagement\Infrastructure\Definitions\MockFormDefinition;
 use LemurAse\FormManagement\Infrastructure\Definitions\MercadoPagoFormDefinition;
 use LemurAse\FormManagement\Infrastructure\Definitions\AlipayFormDefinition;
 use LemurAse\FormManagement\Infrastructure\Definitions\PayPalFormDefinition;
+use LemurAse\FormManagement\Infrastructure\Definitions\PaystackFormDefinition;
+use LemurAse\FormManagement\Infrastructure\Definitions\RazorpayFormDefinition;
 use LemurAse\FormManagement\Infrastructure\Definitions\StripeFormDefinition;
 
 /**
@@ -45,6 +47,8 @@ final class GatewayFormRegistry
         self::register(new MockFormDefinition());
         self::register(new MercadoPagoFormDefinition());
         self::register(new AlipayFormDefinition());
+        self::register(new PaystackFormDefinition());
+        self::register(new RazorpayFormDefinition());
 
         self::$booted = true;
     }

@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-11-08
+
+### Added
+- **Paystack** gateway (`paystack`). Checkout uses Paystack Standard with an amount in subunits and the order in `metadata.order_id`. Webhooks are verified with HMAC-SHA512 of the raw body using the secret key (`x-paystack-signature`). `charge.success` maps to INITIAL_PAYMENT. `refund.processed` maps to REFUND_PROCESSED; it is full when the refunds cover the transaction, which is checked against the API. Refunds are made in the transaction's own currency. Credentials: `secret_key`, `public_key`.
+- **Razorpay** gateway (`razorpay`). Checkout uses Payment Links (`reference_id` = order id; the link id is the order's external id). Webhooks are verified with HMAC-SHA256 of the raw body using the dashboard webhook secret (`X-Razorpay-Signature`); a signature made with the API key secret is rejected. Idempotency uses `X-Razorpay-Event-Id`. `payment_link.paid` maps to INITIAL_PAYMENT and `refund.processed` to REFUND_PROCESSED. Credentials: `key_id`, `key_secret`, `webhook_secret`. Subscribe the webhook to `payment_link.paid` and `refund.processed`.
+- Credential forms, adapter factories and webhook adapters for both gateways are registered by default.
+- `CustomerContacts::resolveUsing(callable)`: the host supplies the customer's email and name for an `external_client_id`. Paystack requires the email; Razorpay uses it to prefill checkout.
+- `WebhookSignatureException` (extends `\Exception`), thrown by the new webhook adapters for unauthentic requests, so hosts can answer 401.
+- `RequestHeaders::get()` reads a header in any letter case, as a string or a list.
+
+### Changed
+- `ProcessRefund` finds the order by `internal_order_id` when the refunded transaction id is not the order's external id (Razorpay refunds point to the payment, not to the payment link).
+
+### Notes
+- Both gateways take one-time payments: `cancelSubscription()` and `pauseSubscription()` report that they are not supported, as Alipay does.
+
 ## [1.2.0] - 2026-11-08
 
 Security release for every payment integration.
