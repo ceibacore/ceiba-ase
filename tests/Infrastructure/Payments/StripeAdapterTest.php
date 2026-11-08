@@ -161,11 +161,16 @@ class StripeAdapterTest extends TestCase
                     'customer' => 'cus_123',
                     'amount_total' => 5000,
                     'currency' => 'usd',
+                    'payment_status' => 'paid',
                     'subscription' => 'sub_123',
                     'metadata' => ['order_id' => 'ord_123']
                 ]
             ]
         ];
+
+        $unpaid = $payload;
+        $unpaid['data']['object']['payment_status'] = 'unpaid';
+        $this->assertEquals('IGNORED', $this->adapter->parseWebhookEvent($unpaid)['action'], 'Pending async payments do not activate');
 
         $normalized = $this->adapter->parseWebhookEvent($payload);
 

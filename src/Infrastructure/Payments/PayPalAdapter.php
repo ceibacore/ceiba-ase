@@ -23,9 +23,14 @@ final class PayPalAdapter implements PaymentGatewayInterface
     ) {
     }
 
+    private function orders(): \LemurAse\Infrastructure\Payments\PayPal\PayPalOrders
+    {
+        return new \LemurAse\Infrastructure\Payments\PayPal\PayPalOrders($this->clientId, $this->clientSecret, $this->sandbox);
+    }
+
     private function getAccessToken(): string
     {
-        $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + [
+        $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create([
             'base_uri' => $this->sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com',
         ]);
         $response = $client->post('/v1/oauth2/token', [
@@ -46,7 +51,7 @@ final class PayPalAdapter implements PaymentGatewayInterface
     public function createCheckoutSession(Order $order, string $successUrl, string $cancelUrl): array
     {
         $token = $this->getAccessToken();
-        $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + [
+        $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create([
             'base_uri' => $this->sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com',
         ]);
 
@@ -63,7 +68,7 @@ final class PayPalAdapter implements PaymentGatewayInterface
                         'custom_id' => $order->id()->uuid(),
                         'amount' => [
                             'currency_code' => strtoupper($order->amount()->currency()->toString()),
-                            'value' => (string) round($order->amount()->amount(), 2)
+                            'value' => \LemurAse\Domain\ValueObjects\MinorUnits::format($order->amount()->amount(), $order->amount()->currency()->toString())
                         ]
                     ]
                 ],
@@ -129,8 +134,17 @@ final class PayPalAdapter implements PaymentGatewayInterface
         }
 
         try {
+            \LemurAse\Infrastructure\Payments\PayPal\PayPalWebhookGuard::assertPlausible(
+                (string) $transmissionId, (string) $transmissionTime, (string) $certUrl, (string) $authAlgo, $this->sandbox
+            );
+        } catch (\InvalidArgumentException $e) {
+            error_log($e->getMessage());
+            return false;
+        }
+
+        try {
             $token = $this->getAccessToken();
-            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + [
+            $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create([
                 'base_uri' => $this->sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com',
             ]);
 
@@ -177,7 +191,10 @@ final class PayPalAdapter implements PaymentGatewayInterface
         $resource = $payload['resource'] ?? [];
 
         $action = match ($eventType) {
-            'CHECKOUT.ORDER.APPROVED' => 'INITIAL_PAYMENT',
+            // Approval does not move money; the order is captured by verifyTransaction()
+            // or the webhook adapter, and PAYMENT.CAPTURE.COMPLETED confirms the payment.
+            'CHECKOUT.ORDER.APPROVED' => 'IGNORED',
+            'PAYMENT.CAPTURE.COMPLETED' => 'INITIAL_PAYMENT',
             'BILLING.SUBSCRIPTION.CREATED' => 'SUBSCRIPTION_CREATED',
             'BILLING.SUBSCRIPTION.ACTIVATED' => 'SUBSCRIPTION_ACTIVATED',
             'PAYMENT.SALE.COMPLETED' => 'RENEWAL_PAYMENT',
@@ -193,11 +210,11 @@ final class PayPalAdapter implements PaymentGatewayInterface
             'external_subscription_id' => $resource['billing_agreement_id'] ?? $resource['id'] ?? null,
             'external_transaction_id' => $payload['id'] ?? null,
             'internal_order_id' => $resource['custom_id'] ?? $resource['custom'] ?? null,
-            'amount' => (float) ($resource['amount']['total'] ?? $resource['gross_amount']['value'] ?? 0),
-            'currency' => strtoupper($resource['amount']['currency'] ?? $resource['gross_amount']['currency_code'] ?? 'USD'),
+            'amount' => (float) ($resource['amount']['value'] ?? $resource['amount']['total'] ?? $resource['gross_amount']['value'] ?? 0),
+            'currency' => strtoupper($resource['amount']['currency_code'] ?? $resource['amount']['currency'] ?? $resource['gross_amount']['currency_code'] ?? 'USD'),
             'status' => 'paid',
             'external_client_id' => $resource['custom_id'] ?? null,
-            'full_refund' => $resource['state'] === 'refunded' || isset($resource['refund_id']),
+            'full_refund' => ($resource['state'] ?? null) === 'refunded' || isset($resource['refund_id']),
             'raw_payload' => $payload
         ];
     }
@@ -215,19 +232,22 @@ final class PayPalAdapter implements PaymentGatewayInterface
     {
         try {
             $token = $this->getAccessToken();
-            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + [
+            $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create([
                 'base_uri' => $this->sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com',
             ]);
 
+            // Refunds must use the capture's currency (never assume USD).
+            $currency = $this->orders()->captureCurrency($externalTransactionId, $token);
             $response = $client->post("/v2/payments/captures/{$externalTransactionId}/refund", [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $token,
-                    'Content-Type' => 'application/json'
+                    'Content-Type' => 'application/json',
+                    'PayPal-Request-Id' => 'refund-' . hash('sha256', $externalTransactionId . '|' . $amount . '|' . $reason),
                 ],
                 'json' => [
                     'amount' => [
-                        'value' => (string) round($amount, 2),
-                        'currency_code' => 'USD'
+                        'value' => \LemurAse\Domain\ValueObjects\MinorUnits::format($amount, $currency),
+                        'currency_code' => $currency
                     ],
                     'note_to_payer' => $reason
                 ]
@@ -254,7 +274,7 @@ final class PayPalAdapter implements PaymentGatewayInterface
     {
         try {
             $token = $this->getAccessToken();
-            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + [
+            $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create([
                 'base_uri' => $this->sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com',
             ]);
 
@@ -266,6 +286,22 @@ final class PayPalAdapter implements PaymentGatewayInterface
             ]);
 
             $data = json_decode((string) $response->getBody(), true);
+
+            // Approved but not yet captured: capture now (idempotent), otherwise no money moved.
+            if (($data['status'] ?? '') === 'APPROVED') {
+                $captured = $this->orders()->capture((string) $externalId);
+                if ($captured !== null) {
+                    return [
+                        'action' => 'INITIAL_PAYMENT',
+                        'external_id' => $captured['order_id'],
+                        'external_transaction_id' => $captured['capture_id'],
+                        'amount' => $captured['amount'],
+                        'currency' => $captured['currency'],
+                        'internal_order_id' => $captured['custom_id'],
+                        'raw_payload' => $data,
+                    ];
+                }
+            }
 
             if (($data['status'] ?? '') === 'COMPLETED') {
                 return [

@@ -38,7 +38,7 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface
      */
     public function createCheckoutSession(Order $order, string $successUrl, string $cancelUrl): array
     {
-        $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
+        $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create(['base_uri' => self::BASE_URL]);
 
         $response = $client->post('/checkout/preferences', [
             'headers' => [
@@ -84,51 +84,13 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface
      */
     public function validateWebhook(array $payload, array $headers): bool
     {
-        $xSignature = $headers['x-signature']
-            ?? $headers['X-Signature']
-            ?? $headers['X-SIGNATURE']
-            ?? '';
-        $xRequestId = $headers['x-request-id']
-            ?? $headers['X-Request-Id']
-            ?? $headers['X-REQUEST-ID']
-            ?? '';
-
-        if (empty($xSignature) || empty($xRequestId)) {
-            error_log('MercadoPago: missing x-signature or x-request-id headers');
+        try {
+            MercadoPago\MercadoPagoSignature::verify($headers, (string) ($payload['data']['id'] ?? ''), (string) $this->webhookSecret);
+            return true;
+        } catch (\InvalidArgumentException $e) {
+            error_log($e->getMessage());
             return false;
         }
-
-        // Parse ts and v1 from x-signature (format: ts=xxx,v1=yyy)
-        $ts = '';
-        $v1 = '';
-        $parts = explode(',', $xSignature);
-        foreach ($parts as $part) {
-            $kv = explode('=', trim($part), 2);
-            if (count($kv) === 2) {
-                if ($kv[0] === 'ts') {
-                    $ts = $kv[1];
-                } elseif ($kv[0] === 'v1') {
-                    $v1 = $kv[1];
-                }
-            }
-        }
-
-        if (empty($ts) || empty($v1)) {
-            error_log('MercadoPago: x-signature missing ts or v1 components');
-            return false;
-        }
-
-        $dataId = (string) ($payload['data']['id'] ?? '');
-        if (empty($dataId)) {
-            error_log('MercadoPago: payload missing data.id for signature verification');
-            return false;
-        }
-
-        // Build the signed string
-        $signedString = sprintf('id:%s;request-id:%s;ts:%s;', $dataId, $xRequestId, $ts);
-        $computed = hash_hmac('sha256', $signedString, $this->webhookSecret);
-
-        return hash_equals($computed, $v1);
     }
 
     /**
@@ -153,7 +115,10 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface
 
         // Fetch full payment details from MP API
         try {
-            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
+            $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create(['base_uri' => self::BASE_URL]);
+            if (!MercadoPago\MercadoPagoSignature::isSafeId((string) $dataId)) {
+                throw new \InvalidArgumentException('MercadoPago: invalid payment id');
+            }
             $response = $client->get("/v1/payments/{$dataId}", [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $this->accessToken,
@@ -207,7 +172,7 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface
     public function refund(string $externalTransactionId, float $amount, string $reason): array
     {
         try {
-            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
+            $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create(['base_uri' => self::BASE_URL]);
 
             $options = [
                 'headers' => [
@@ -222,6 +187,9 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface
                 $options['json'] = ['amount' => round($amount, 2)];
             }
 
+            if (!MercadoPago\MercadoPagoSignature::isSafeId((string) $externalTransactionId)) {
+                throw new \InvalidArgumentException('MercadoPago: invalid payment id');
+            }
             $response = $client->post("/v1/payments/{$externalTransactionId}/refunds", $options);
             $data = json_decode((string) $response->getBody(), true);
 
@@ -243,7 +211,10 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface
     public function verifyTransaction(string $externalId): array
     {
         try {
-            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
+            $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create(['base_uri' => self::BASE_URL]);
+            if (!MercadoPago\MercadoPagoSignature::isSafeId((string) $externalId)) {
+                throw new \InvalidArgumentException('MercadoPago: invalid payment id');
+            }
             $response = $client->get("/v1/payments/{$externalId}", [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $this->accessToken,
@@ -278,7 +249,7 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface
     public function cancelSubscription(string $externalId, bool $atPeriodEnd = true): array
     {
         try {
-            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
+            $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create(['base_uri' => self::BASE_URL]);
             $client->put("/preapproval/{$externalId}", [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $this->accessToken,
@@ -299,7 +270,7 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface
     public function pauseSubscription(string $externalId): array
     {
         try {
-            $client = new \GuzzleHttp\Client(\LemurAse\Infrastructure\Http\HttpDefaults::OPTIONS + ['base_uri' => self::BASE_URL]);
+            $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create(['base_uri' => self::BASE_URL]);
             $client->put("/preapproval/{$externalId}", [
                 'headers' => [
                     'Authorization' => 'Bearer ' . $this->accessToken,
