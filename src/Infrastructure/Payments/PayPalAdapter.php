@@ -13,7 +13,7 @@ use LemurAse\Domain\Entities\Order;
  *
  * SECURITY: Webhook signature verification must use PayPal's certificate-based verification.
  */
-final class PayPalAdapter implements PaymentGatewayInterface
+final class PayPalAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface
 {
     public function __construct(
         private readonly string $clientId,
@@ -50,6 +50,12 @@ final class PayPalAdapter implements PaymentGatewayInterface
      */
     public function createCheckoutSession(Order $order, string $successUrl, string $cancelUrl): array
     {
+        return $this->createPaymentSession($order, $successUrl, $cancelUrl);
+    }
+
+    /** Plan orders and ceiba-ase payments share the checkout: the id travels as the order reference. */
+    public function createPaymentSession(\LemurAse\Domain\Gateways\Chargeable $order, string $successUrl, string $cancelUrl): array
+    {
         $token = $this->getAccessToken();
         $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create([
             'base_uri' => $this->sandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com',
@@ -66,6 +72,7 @@ final class PayPalAdapter implements PaymentGatewayInterface
                 'purchase_units' => [
                     [
                         'custom_id' => $order->id()->uuid(),
+                        'description' => mb_substr($order->description(), 0, 127),
                         'amount' => [
                             'currency_code' => strtoupper($order->amount()->currency()->toString()),
                             'value' => \LemurAse\Domain\ValueObjects\MinorUnits::format($order->amount()->amount(), $order->amount()->currency()->toString())

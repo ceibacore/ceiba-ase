@@ -16,7 +16,7 @@ use LemurAse\Domain\Entities\Order;
  *
  * Supported regions: Argentina, Brasil, México, Colombia, Chile, Uruguay, Perú.
  */
-final class MercadoPagoAdapter implements PaymentGatewayInterface
+final class MercadoPagoAdapter implements PaymentGatewayInterface, \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface
 {
     private const BASE_URL = 'https://api.mercadopago.com';
 
@@ -38,6 +38,12 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface
      */
     public function createCheckoutSession(Order $order, string $successUrl, string $cancelUrl): array
     {
+        return $this->createPaymentSession($order, $successUrl, $cancelUrl);
+    }
+
+    /** Plan orders and ceiba-ase payments share the checkout: the id travels as the order reference. */
+    public function createPaymentSession(\LemurAse\Domain\Gateways\Chargeable $order, string $successUrl, string $cancelUrl): array
+    {
         $client = \LemurAse\Infrastructure\Http\HttpClientFactory::create(['base_uri' => self::BASE_URL]);
 
         $response = $client->post('/checkout/preferences', [
@@ -48,7 +54,7 @@ final class MercadoPagoAdapter implements PaymentGatewayInterface
             ],
             'json' => [
                 'items' => [[
-                    'title'       => 'Order ' . $order->id()->uuid(),
+                    'title'       => mb_substr($order->description(), 0, 250),
                     'quantity'    => 1,
                     'unit_price'  => round($order->amount()->amount(), 2),
                     'currency_id' => strtoupper($order->amount()->currency()->toString()),

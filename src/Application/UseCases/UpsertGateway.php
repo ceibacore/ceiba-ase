@@ -38,7 +38,12 @@ final class UpsertGateway
         string $provider,
         array  $credentials,
         bool   $isActive = true,
+        ?string $accountRef = null,
     ): Gateway {
+        $accountRef = \LemurAse\Domain\ValueObjects\AccountRef::normalize($accountRef);
+        if ($accountRef !== null && $provider === 'mock') {
+            throw new \InvalidArgumentException('The mock gateway is reserved for the platform.');
+        }
         if (!GatewayFormRegistry::has($provider)) {
             throw new \InvalidArgumentException(
                 "Unsupported provider '{$provider}'. " .
@@ -47,7 +52,7 @@ final class UpsertGateway
         }
 
         // Find any existing gateway (active or inactive) for this provider
-        $existing = $this->findByProviderAny($provider);
+        $existing = $this->gatewayRepo->findByProviderForAccount($provider, $accountRef, false);
 
         if ($existing !== null) {
             // Rebuild entity with same ID but new credentials / active state
@@ -56,6 +61,7 @@ final class UpsertGateway
                 $provider,
                 $credentials,
                 $isActive,
+                $accountRef,
             );
         } else {
             $gateway = new Gateway(
@@ -63,26 +69,12 @@ final class UpsertGateway
                 $provider,
                 $credentials,
                 $isActive,
+                $accountRef,
             );
         }
 
         $this->gatewayRepo->save($gateway);
 
         return $gateway;
-    }
-
-    /**
-     * Find a gateway by provider regardless of active state.
-     * GatewayRepositoryInterface::findByProvider() only returns active gateways,
-     * so we use findAll() to cover inactive ones.
-     */
-    private function findByProviderAny(string $provider): ?Gateway
-    {
-        foreach ($this->gatewayRepo->findAll() as $gateway) {
-            if ($gateway->provider() === $provider) {
-                return $gateway;
-            }
-        }
-        return null;
     }
 }

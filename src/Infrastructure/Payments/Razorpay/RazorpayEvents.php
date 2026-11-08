@@ -46,6 +46,8 @@ final class RazorpayEvents
             'currency'                 => $currency,
             'internal_order_id'        => ($link['reference_id'] ?? '') !== '' ? $link['reference_id'] : ($notes['order_id'] ?? null),
             'external_client_id'       => $notes['external_client_id'] ?? null,
+            // RazorpayAdapter::refund() takes the payment link id.
+            'refund_reference'         => (string) ($link['id'] ?? ''),
             'raw_payload'              => $raw,
         ];
     }
@@ -88,6 +90,7 @@ final class RazorpayEvents
                 'amount'                  => MinorUnits::fromMinor($refund['amount'] ?? 0, $currency),
                 'currency'                => $currency,
                 'full_refund'             => $charged > 0 && $refunded >= $charged,
+                'refunded_total'          => $charged > 0 ? MinorUnits::fromMinor($refunded, $currency) : null,
                 'raw_payload'             => $event,
             ],
         ];

@@ -45,6 +45,7 @@ final class CeibaGatewayRepository implements GatewayRepositoryInterface
             'provider'    => $gateway->provider(),
             'credentials' => $this->encodeCredentials($gateway->credentials()),
             'is_active'   => $gateway->isActive() ? 1 : 0,
+            'account_ref' => $gateway->accountRef(),
         ];
 
         if ($existing) {
@@ -71,6 +72,7 @@ final class CeibaGatewayRepository implements GatewayRepositoryInterface
     {
         $rows = CeibaInstance::get()
             ->query(TableNames::GATEWAYS)
+            ->where(['account_ref' => null])
             ->orderBy('provider')
             ->get();
 
@@ -81,7 +83,7 @@ final class CeibaGatewayRepository implements GatewayRepositoryInterface
     {
         $rows = CeibaInstance::get()
             ->query(TableNames::GATEWAYS)
-            ->where(['is_active' => 1])
+            ->where(['is_active' => 1, 'account_ref' => null])
             ->orderBy('provider')
             ->get();
 
@@ -92,8 +94,30 @@ final class CeibaGatewayRepository implements GatewayRepositoryInterface
     {
         $row = CeibaInstance::get()
             ->query(TableNames::GATEWAYS)
-            ->where(['provider' => $provider, 'is_active' => 1])
+            ->where(['provider' => $provider, 'is_active' => 1, 'account_ref' => null])
             ->first();
+
+        return $row ? $this->hydrateGateway($row) : null;
+    }
+
+    public function findForAccount(?string $accountRef): array
+    {
+        $rows = CeibaInstance::get()
+            ->query(TableNames::GATEWAYS)
+            ->where(['account_ref' => $accountRef])
+            ->orderBy('provider')
+            ->get();
+
+        return array_map(fn($row) => $this->hydrateGateway($row), $rows ?? []);
+    }
+
+    public function findByProviderForAccount(string $provider, ?string $accountRef, bool $activeOnly = true): ?Gateway
+    {
+        $where = ['provider' => $provider, 'account_ref' => $accountRef];
+        if ($activeOnly) {
+            $where['is_active'] = 1;
+        }
+        $row = CeibaInstance::get()->query(TableNames::GATEWAYS)->where($where)->first();
 
         return $row ? $this->hydrateGateway($row) : null;
     }
@@ -138,6 +162,7 @@ final class CeibaGatewayRepository implements GatewayRepositoryInterface
             $row['provider'],
             $this->decodeCredentials($row['credentials']),
             (bool) $row['is_active'],
+            isset($row['account_ref']) && $row['account_ref'] !== '' ? (string) $row['account_ref'] : null,
         );
     }
 }

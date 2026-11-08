@@ -61,6 +61,7 @@ final class AseManager
     public CeibaTransactionLogRepository $logRepo;
     public CeibaPlanRepository $planRepo;
     public CeibaGatewayRepository $gatewayRepo;
+    public \LemurAse\Infrastructure\Persistence\CeibaPaymentRepository $paymentRepo;
 
     // Services
     public SecurityService $securityService;
@@ -77,6 +78,7 @@ final class AseManager
         $this->logRepo = new CeibaTransactionLogRepository();
         $this->planRepo = new CeibaPlanRepository();
         $this->gatewayRepo = new CeibaGatewayRepository();
+        $this->paymentRepo = new \LemurAse\Infrastructure\Persistence\CeibaPaymentRepository();
 
         $this->securityService = new SecurityService();
         $this->priceCalculator = new PriceCalculator($this->customPriceRepo);
@@ -516,11 +518,12 @@ final class AseManager
     public static function upsertGateway(
         string $provider,
         array $credentials,
-        bool $isActive = true
+        bool $isActive = true,
+        ?string $accountRef = null
     ): array {
         $manager = self::getInstance();
         $useCase = new UpsertGateway($manager->gatewayRepo);
-        $gateway = $useCase->execute($provider, $credentials, $isActive);
+        $gateway = $useCase->execute($provider, $credentials, $isActive, $accountRef);
 
         return [
             'id' => $gateway->id()->uuid(),
@@ -728,21 +731,19 @@ final class AseManager
      * Get raw credentials for a provider. 
      * WARNING: Use only for admin configuration forms.
      */
-    public static function getGatewayCredentialsByProvider(string $provider): array
+    public static function getGatewayCredentialsByProvider(string $provider, ?string $accountRef = null): array
     {
         $manager = self::getInstance();
-        $gateways = $manager->gatewayRepo->findAll();
-
-        foreach ($gateways as $gateway) {
-            if ($gateway->provider() === $provider) {
-                $creds = $gateway->credentials();
-                $creds['is_active'] = $gateway->isActive();
-                $creds['gateway_id'] = $gateway->id()->uuid();
-                return $creds;
-            }
+        $accountRef = \LemurAse\Domain\ValueObjects\AccountRef::normalize($accountRef);
+        $gateway = $manager->gatewayRepo->findByProviderForAccount($provider, $accountRef, false);
+        if ($gateway === null) {
+            return [];
         }
+        $creds = $gateway->credentials();
+        $creds['is_active'] = $gateway->isActive();
+        $creds['gateway_id'] = $gateway->id()->uuid();
 
-        return [];
+        return $creds;
     }
 
     /**
@@ -804,6 +805,11 @@ final class AseManager
             throw new \RuntimeException("Gateway '{$gatewayId}' not found in database.");
         }
 
+        // Plan orders are charged with the platform's gateways only, never an academy's.
+        if ($gateway->accountRef() !== null) {
+            throw new \RuntimeException("Gateway '{$gatewayId}' belongs to an account and cannot charge plan orders.");
+        }
+
         if (!$gateway->isActive()) {
             throw new \RuntimeException("Gateway '{$gatewayId}' is not active.");
         }
@@ -818,9 +824,163 @@ final class AseManager
      * @param string $payload  The raw body of the request (JSON)
      * @param array  $headers  The request headers (required for signature verification)
      */
-    public static function handleWebhook(string $provider, string $payload, array $headers = []): bool
+    public static function handleWebhook(string $provider, string $payload, array $headers = [], ?string $accountRef = null): bool
     {
-        return \LemurAse\WebhookManagement\UI\WebhookManager::handle($payload, $headers, $provider);
+        return \LemurAse\WebhookManagement\UI\WebhookManager::handle($payload, $headers, $provider, $accountRef);
+    }
+
+    // ── One-time payments (contexts other than plan subscriptions) ───────────
+
+    /**
+     * Starts a one-time payment through the account's gateway (platform when accountRef
+     * is null). The payment is stored as pending before the provider is called.
+     *
+     * @return array{payment_id: string, checkout_url: string, external_id: string}
+     */
+    public static function createPayment(\LemurAse\Domain\ValueObjects\PaymentRequest $request): array
+    {
+        $manager = self::getInstance();
+        $accountRef = \LemurAse\Domain\ValueObjects\AccountRef::normalize($request->accountRef);
+        $gateway = $manager->gatewayRepo->findByProviderForAccount($request->provider, $accountRef, true)
+            ?? throw new \RuntimeException("Gateway '{$request->provider}' is not active for this account.");
+        if ($accountRef !== null && $gateway->provider() === 'mock') {
+            throw new \RuntimeException('The mock gateway cannot charge account payments.');
+        }
+        $adapter = GatewayAdapterRegistry::make($gateway->provider(), $gateway->credentials());
+        if (!$adapter instanceof \LemurAse\Domain\Gateways\OneTimePaymentGatewayInterface) {
+            throw new \RuntimeException("Gateway '{$request->provider}' does not support one-time payments.");
+        }
+
+        $currency = strtoupper($request->currency);
+        $payment = new \LemurAse\Domain\Entities\Payment(
+            EntityId::generate(), $request->context, $request->reference, $accountRef, $request->externalClientId,
+            $gateway->id(), $gateway->provider(),
+            \LemurAse\Domain\ValueObjects\Money::create($request->amount, \LemurAse\Domain\ValueObjects\Currency::fromString($currency)),
+            mb_substr($request->description, 0, 255), metadata: $request->metadata,
+        );
+        $manager->paymentRepo->save($payment);
+
+        try {
+            $session = $adapter->createPaymentSession($payment, $request->successUrl, $request->cancelUrl);
+        } catch (\Throwable $e) {
+            $payment->markFailed();
+            $manager->paymentRepo->save($payment);
+            throw $e;
+        }
+        if (empty($session['checkout_url']) || empty($session['external_id'])) {
+            $payment->markFailed();
+            $manager->paymentRepo->save($payment);
+            throw new \RuntimeException("Gateway '{$request->provider}' returned no checkout session.");
+        }
+        $payment->attachSession((string) $session['external_id']);
+        $manager->paymentRepo->save($payment);
+
+        return [
+            'payment_id' => $payment->id()->uuid(),
+            'checkout_url' => (string) $session['checkout_url'],
+            'external_id' => (string) $session['external_id'],
+        ];
+    }
+
+    public static function getPayment(string $paymentId): ?array
+    {
+        return self::getInstance()->paymentRepo->findById(EntityId::fromString($paymentId))?->toArray();
+    }
+
+    /** @return array<int, array> newest first */
+    public static function getPaymentsByReference(string $context, string $reference): array
+    {
+        return array_map(fn ($p) => $p->toArray(), self::getInstance()->paymentRepo->findByReference($context, $reference));
+    }
+
+    /**
+     * Refunds a settled payment (the remaining amount when $amount is null). The refund
+     * is applied when the provider accepts it; its later webhook is recognised by the
+     * refund id and not applied twice.
+     *
+     * @return array{status: 'success'|'failed', refund_id?: string, error?: string, payment?: array}
+     */
+    public static function refundPayment(string $paymentId, ?float $amount, string $reason): array
+    {
+        $manager = self::getInstance();
+        $payment = $manager->paymentRepo->findById(EntityId::fromString($paymentId))
+            ?? throw new \RuntimeException("Payment {$paymentId} not found.");
+        if (!in_array($payment->status(), ['paid', 'partially_refunded'], true)) {
+            return ['status' => 'failed', 'error' => "Payment is {$payment->status()}; nothing to refund."];
+        }
+        $currency = $payment->currency();
+        $remainingMinor = $payment->amountMinor() - $payment->refundedMinor();
+        $refundMinor = $amount === null ? $remainingMinor : \LemurAse\Domain\ValueObjects\MinorUnits::toMinor($amount, $currency);
+        if ($refundMinor <= 0 || $refundMinor > $remainingMinor) {
+            return ['status' => 'failed', 'error' => 'Refund amount must be greater than zero and not exceed the remaining amount.'];
+        }
+
+        $gateway = $manager->gatewayRepo->findById($payment->gatewayId())
+            ?? throw new \RuntimeException("Gateway of payment {$paymentId} not found.");
+        $refundAmount = \LemurAse\Domain\ValueObjects\MinorUnits::fromMinor($refundMinor, $currency);
+        $result = GatewayAdapterRegistry::make($gateway->provider(), $gateway->credentials())
+            ->refund((string) ($payment->externalPaymentId() ?: $payment->externalId()), $refundAmount, $reason);
+        if (($result['status'] ?? '') !== 'success') {
+            return ['status' => 'failed', 'error' => (string) ($result['error'] ?? 'The provider rejected the refund.')];
+        }
+
+        $refundId = (string) ($result['external_refund_id'] ?? '');
+        $refundId = $refundId !== '' ? $refundId : 'api-' . EntityId::generate()->uuid();
+        (new \LemurAse\Application\UseCases\ProcessPaymentEvent($manager->paymentRepo, $manager->logRepo))
+            ->applyRefund($payment, $refundId, $refundAmount);
+
+        return ['status' => 'success', 'refund_id' => $refundId, 'payment' => self::getPayment($paymentId)];
+    }
+
+    /**
+     * Asks the provider for the payment status and applies it (for a webhook that has not
+     * arrived). Returns the payment after the check.
+     */
+    public static function verifyPayment(string $paymentId): ?array
+    {
+        $manager = self::getInstance();
+        $payment = $manager->paymentRepo->findById(EntityId::fromString($paymentId));
+        if (!$payment || $payment->status() !== 'pending' || !$payment->externalId()) {
+            return $payment?->toArray();
+        }
+        $gateway = $manager->gatewayRepo->findById($payment->gatewayId());
+        if (!$gateway) {
+            return $payment->toArray();
+        }
+        $adapter = GatewayAdapterRegistry::make($gateway->provider(), $gateway->credentials());
+        $data = $adapter->verifyTransaction($payment->externalId());
+        if (($data['action'] ?? '') !== 'INITIAL_PAYMENT') {
+            return $payment->toArray();
+        }
+        // Only the Mock adapter (development) inherits the payment amount.
+        if ($adapter instanceof \LemurAse\Infrastructure\Payments\MockAdapter) {
+            $data['amount'] = $payment->amount()->amount();
+            $data['currency'] = $payment->currency();
+        }
+        $event = new \LemurAse\WebhookManagement\Domain\WebhookEvent('INITIAL_PAYMENT', $data,
+            'verify:' . $payment->provider() . ':' . $payment->externalId(), $payment->provider(), $data);
+        (new \LemurAse\Application\UseCases\ProcessPaymentEvent($manager->paymentRepo, $manager->logRepo))
+            ->execute($payment, $event, $payment->accountRef());
+
+        return self::getPayment($paymentId);
+    }
+
+    /**
+     * Gateways of an account (an academy's own credentials). Credentials are returned for
+     * the host's configuration form only.
+     *
+     * @return array<int, array{id: string, provider: string, is_active: bool, credentials: array}>
+     */
+    public static function getAccountGateways(string $accountRef): array
+    {
+        $accountRef = (string) \LemurAse\Domain\ValueObjects\AccountRef::normalize($accountRef);
+
+        return array_map(fn ($g) => [
+            'id' => $g->id()->uuid(),
+            'provider' => $g->provider(),
+            'is_active' => $g->isActive(),
+            'credentials' => $g->credentials(),
+        ], self::getInstance()->gatewayRepo->findForAccount($accountRef));
     }
 
     /**

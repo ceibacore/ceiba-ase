@@ -24,6 +24,6 @@ final class WebhookEventTest extends TestCase
     public function testWebhookManagerDoesNotWriteIntoTheReadonlyEvent(): void
     {
         $source = (string) file_get_contents(dirname(__DIR__, 3) . '/src/WebhookManagement/UI/WebhookManager.php');
-        $this->assertStringNotContainsString('$event->data[', $source);
+        $this->assertDoesNotMatchRegularExpression('/\$event->data\[[^\]]*\]\s*=(?!=)/', $source, 'Assignment into the readonly event data');
     }
 }

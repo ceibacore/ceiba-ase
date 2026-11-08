@@ -91,6 +91,16 @@ final class StripeWebhookAdapter implements WebhookAdapterInterface
             // Async payment events carry the session too, so metadata is still available.
             $normalized['internal_order_id'] = $data['metadata']['order_id'] ?? null;
             $normalized['external_client_id'] = $data['client_reference_id'] ?? null;
+            // Refunds are issued against the payment intent, not the checkout session.
+            $normalized['refund_reference'] = $data['payment_intent'] ?? null;
+        }
+
+        // charge.refunded: the charge carries the payment intent metadata (order_id).
+        if ($action === 'REFUND_PROCESSED') {
+            $normalized['internal_order_id'] = $data['metadata']['order_id'] ?? null;
+            $normalized['refund_reference'] = $data['payment_intent'] ?? null;
+            $normalized['full_refund'] = (bool) ($data['refunded'] ?? false);
+            $normalized['refunded_total'] = MinorUnits::fromMinor($data['amount_refunded'] ?? 0, (string) ($data['currency'] ?? 'usd'));
         }
 
         // Specific mappings for SUBSCRIPTION_UPDATED

@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-11-08
+
+One-time payments with a context, and gateways owned by accounts (an academy's own provider credentials).
+
+### Upgrade notes
+- Run the ASE migrations: `ase_gateways.account_ref` and the new `ase_payments` table.
+- Existing gateways become platform gateways (`account_ref` NULL). `findAll()`, `findAllEnabled()`, `findByProvider()` and `getAllGateways()` now return platform gateways only. Custom `GatewayRepositoryInterface` implementations must add `findForAccount()` and `findByProviderForAccount()`.
+- `WebhookUrls` resolvers receive `($provider, $context, $accountRef)`. One-argument resolvers keep working.
+- Plan orders refuse gateways owned by an account.
+
+### Added
+- **Account-scoped gateways.** `upsertGateway(..., $accountRef)`, `getGatewayCredentialsByProvider($provider, $accountRef)` and `getAccountGateways($accountRef)`. `AccountRef` validates references such as `tenant:42`. The mock gateway is reserved for the platform.
+- **One-time payments.**
+  - `AseManager::createPayment(PaymentRequest)` stores the payment as pending and charges it through the account's gateway.
+  - Also: `getPayment()`, `getPaymentsByReference()`, `refundPayment()` (partial or the remaining amount) and `verifyPayment()`.
+- `Chargeable` and `OneTimePaymentGatewayInterface`. All built-in adapters implement it; plan orders and payments share each adapter's checkout. Stripe uses a payment-mode session with the payment id in the session and payment intent metadata.
+- **Webhook routing by payment.** `handleWebhook($provider, $payload, $headers, $accountRef)`:
+  - verifies the request with the credentials of the account behind the URL;
+  - applies the event to the payment it refers to, which must belong to that account (`ProcessPaymentEvent`);
+  - otherwise goes to the plan subscription flow, platform account only.
+  - Events of an account that match no payment are acknowledged and ignored.
+- **Payment events** `payment.succeeded`, `payment.failed` and `payment.refunded`, written to the outbox inside the payment transaction (`AseEventDispatcher::dispatchReliably`). Listeners receive the `outbox_event_id`.
+- Settling requires the provider to report the payment currency and at least its amount (minor units). Each provider event and each refund id is applied once; API and webhook refunds are recognised as the same refund.
+- `refund_reference` in normalized webhook data (Stripe payment intent, Razorpay payment link); Stripe refunds report `full_refund` and `refunded_total`.
+
 ## [1.4.0] - 2026-11-08
 
 ### Upgrade notes

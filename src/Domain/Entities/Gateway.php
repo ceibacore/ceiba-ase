@@ -10,7 +10,8 @@ final class Gateway extends AggregateRoot
         EntityId $id,
         private string $provider,       // 'stripe' | 'paypal'
         private array  $credentials,    // decoded from JSON
-        private bool   $isActive = true
+        private bool   $isActive = true,
+        private ?string $accountRef = null  // null = platform; 'tenant:{id}' = academy
     ) {
         parent::__construct($id);
     }
@@ -18,4 +19,5 @@ final class Gateway extends AggregateRoot
     public function provider(): string    { return $this->provider; }
     public function credentials(): array  { return $this->credentials; }
     public function isActive(): bool      { return $this->isActive; }
+    public function accountRef(): ?string { return $this->accountRef; }
 }

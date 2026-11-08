@@ -247,6 +247,8 @@ final class MemoryStore
                 public function findAll(): array { return []; }
                 public function findAllEnabled(): array { return []; }
                 public function findByProvider(string $provider): ?Gateway { return null; }
+                public function findForAccount(?string $accountRef): array { return []; }
+                public function findByProviderForAccount(string $provider, ?string $accountRef, bool $activeOnly = true): ?Gateway { return null; }
             },
         ];
     }

@@ -1008,3 +1008,29 @@ php bin/ase-migrate status
 
 ---
 
+
+
+## One-time payments (1.5)
+
+```php
+use LemurAse\AseManager;
+use LemurAse\Domain\ValueObjects\{AccountRef, PaymentRequest};
+
+// An academy stores its own provider credentials.
+AseManager::upsertGateway('paystack', $credentials, true, AccountRef::tenant($tenantId));
+
+// Charge a marketplace order through that account.
+$session = AseManager::createPayment(new PaymentRequest(
+    context: 'marketplace', reference: (string) $order->id, externalClientId: (string) $student->id,
+    amount: 49.99, currency: 'USD', provider: 'paystack', description: $product->title,
+    successUrl: $ok, cancelUrl: $cancel, accountRef: AccountRef::tenant($tenantId),
+));
+// redirect to $session['checkout_url']
+
+// The account's webhook URL: verified with its credentials, routed to the payment.
+AseManager::handleWebhook('paystack', $rawBody, $headers, AccountRef::tenant($tenantId));
+```
+
+Outcomes arrive as outbox events (`ase_outbox_events`): `payment.succeeded`, `payment.failed`,
+`payment.refunded`, with `payment_id`, `context`, `reference`, `account_ref`, `amount_minor`
+and `currency`. Refunds: `AseManager::refundPayment($paymentId, ?$amount, $reason)`.

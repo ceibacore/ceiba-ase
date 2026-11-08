@@ -5,7 +5,7 @@ namespace LemurAse\Domain\Entities;
 use LemurAse\Domain\ValueObjects\EntityId;
 use LemurAse\Domain\ValueObjects\Money;
 
-final class Order extends AggregateRoot
+final class Order extends AggregateRoot implements \LemurAse\Domain\Gateways\Chargeable
 {
     public function __construct(
         EntityId $id,
@@ -22,6 +22,10 @@ final class Order extends AggregateRoot
         parent::__construct($id);
     }
 
+    public function description(): string { return 'Order ' . $this->id()->uuid(); }
+    public function context(): string { return 'subscription'; }
+    /** Plan orders are always charged with the platform's gateways. */
+    public function accountRef(): ?string { return null; }
     public function externalClientId(): string { return $this->externalClientId; }
     public function planPriceId(): EntityId { return $this->planPriceId; }
     public function gatewayId(): EntityId { return $this->gatewayId; }
