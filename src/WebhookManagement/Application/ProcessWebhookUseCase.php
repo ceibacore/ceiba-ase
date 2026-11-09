@@ -129,9 +129,15 @@ final class ProcessWebhookUseCase
         AseEventDispatcher::dispatch('subscription.activated', [
             'external_client_id' => $order->externalClientId(),
             'subscription_id'    => $subId->uuid(),
+            'order_id'           => $order->id()->uuid(),
+            'plan_id'            => $plan->id()->uuid(),
             'plan_slug'          => $planSlug,
-            'expires_at'         => $periodEnd,
-        ]);
+            'account_ref'        => $plan->accountRef(),
+            'status'             => $status,
+            'amount'             => (float) $data['amount'],
+            'currency'           => strtoupper($order->amount()->currency()->toString()),
+            'expires_at'         => $periodEnd->format(DATE_ATOM),
+        ], 'subscription', $subId->uuid());
     }
 
     /**
@@ -179,10 +185,12 @@ final class ProcessWebhookUseCase
         $order = $this->orderRepo->findById($subscription->orderId());
         $this->createInvoice($order, $subscription->id(), $data['amount'], 'paid', $newStart, $newEnd);
 
-        AseEventDispatcher::dispatch('subscription.renewed', [
-            'subscription_id' => $subscription->id()->uuid(),
-            'expires_at'      => $newEnd,
-        ]);
+        AseEventDispatcher::dispatch('subscription.renewed', $this->subscriptionContext($subscription) + [
+            'amount'          => (float) ($data['amount'] ?? 0),
+            'currency'        => strtoupper((string) ($data['currency'] ?? $order?->amount()->currency()->toString() ?? '')),
+            'invoice_reference' => (string) ($data['external_transaction_id'] ?? ''),
+            'expires_at'      => $newEnd->format(DATE_ATOM),
+        ], 'subscription', $subscription->id()->uuid());
     }
 
     private function handlePaymentFailed(array $data): void
@@ -198,9 +206,7 @@ final class ProcessWebhookUseCase
         );
         $this->subRepo->save($updatedSub);
 
-        AseEventDispatcher::dispatch('subscription.payment_failed', [
-            'subscription_id'    => $subscription->id()->uuid(),
-            'external_client_id' => $subscription->externalClientId(),
+        AseEventDispatcher::dispatch('subscription.payment_failed', $this->subscriptionContext($subscription) + [
             'reason'             => $data['failure_reason'] ?? 'payment_failed',
         ], 'subscription', $subscription->id()->uuid());
     }
@@ -218,10 +224,10 @@ final class ProcessWebhookUseCase
         );
         $this->subRepo->save($updatedSub);
 
-        AseEventDispatcher::dispatch('subscription.canceled', [
-            'subscription_id' => $subscription->id()->uuid(),
+        AseEventDispatcher::dispatch('subscription.canceled', $this->subscriptionContext($subscription) + [
             'immediate'       => true,
-        ]);
+            'expires_at'      => $subscription->currentPeriodEnd()?->format(DATE_ATOM),
+        ], 'subscription', $subscription->id()->uuid());
     }
 
     private function handleSubscriptionUpdated(array $data): void
@@ -250,16 +256,31 @@ final class ProcessWebhookUseCase
         $this->subRepo->save($updated);
 
         if ($newStatus === 'canceled') {
-            AseEventDispatcher::dispatch('subscription.canceled', [
-                'subscription_id' => $subscription->id()->uuid(),
+            AseEventDispatcher::dispatch('subscription.canceled', $this->subscriptionContext($subscription) + [
                 'immediate'       => false,
+                'expires_at'      => $periodEnd->format(DATE_ATOM),
             ], 'subscription', $subscription->id()->uuid());
         } elseif ($newStatus === 'past_due' || $newStatus === 'suspended') {
-            AseEventDispatcher::dispatch('subscription.suspended', [
-                'subscription_id' => $subscription->id()->uuid(),
+            AseEventDispatcher::dispatch('subscription.suspended', $this->subscriptionContext($subscription) + [
                 'reason'          => 'provider_status_' . $newStatus,
             ], 'subscription', $subscription->id()->uuid());
         }
+    }
+
+    /** Who and what a subscription event is about (hosts route academy plans by account_ref). */
+    private function subscriptionContext($subscription): array
+    {
+        $price = $this->planPriceRepo->findById($subscription->planPriceId());
+        $plan = $price ? $this->planRepo->findById($price->planId()) : null;
+
+        return [
+            'subscription_id'    => $subscription->id()->uuid(),
+            'order_id'           => $subscription->orderId()->uuid(),
+            'external_client_id' => $subscription->externalClientId(),
+            'plan_id'            => $plan?->id()->uuid(),
+            'plan_slug'          => $plan?->slug(),
+            'account_ref'        => $plan?->accountRef(),
+        ];
     }
 
     private function handleRefund(array $data): void

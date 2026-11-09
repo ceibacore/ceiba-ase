@@ -17,4 +17,7 @@ interface PlanRepositoryInterface
     public function findBySlug(string $slug): ?Plan;
 
     public function existsBySlug(string $slug): bool;
+
+    /** @return Plan[] plans owned by an account ('tenant:{id}') */
+    public function findForAccount(string $accountRef, bool $onlyActive = false): array;
 }

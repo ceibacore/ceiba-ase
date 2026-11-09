@@ -24,6 +24,7 @@ final class CeibaPlanRepository implements PlanRepositoryInterface
             'description' => $plan->description(),
             'is_active'   => $plan->isActive() ? 1 : 0,
             'metadata'    => $plan->metadata() ? json_encode($plan->metadata()) : null,
+            'account_ref' => $plan->accountRef(),
         ];
 
         if ($existing) {
@@ -46,9 +47,19 @@ final class CeibaPlanRepository implements PlanRepositoryInterface
         return $row ? $this->hydrate($row) : null;
     }
 
+    /** Platform plans only (an academy's plans are listed with findForAccount()). */
     public function findAll(bool $onlyActive = false): array
     {
-        $q = CeibaInstance::get()->query(TableNames::PLANS);
+        $q = CeibaInstance::get()->query(TableNames::PLANS)->where('account_ref', null);
+        if ($onlyActive) {
+            $q = $q->where(['is_active' => 1]);
+        }
+        return array_map([$this, 'hydrate'], $q->get());
+    }
+
+    public function findForAccount(string $accountRef, bool $onlyActive = false): array
+    {
+        $q = CeibaInstance::get()->query(TableNames::PLANS)->where(['account_ref' => $accountRef]);
         if ($onlyActive) {
             $q = $q->where(['is_active' => 1]);
         }
@@ -88,7 +99,8 @@ final class CeibaPlanRepository implements PlanRepositoryInterface
             $row['name'],
             $row['description'] ?? null,
             (bool) $row['is_active'],
-            $metadata
+            $metadata,
+            isset($row['account_ref']) && $row['account_ref'] !== '' ? (string) $row['account_ref'] : null
         );
     }
 }

@@ -36,7 +36,9 @@ final class UpdatePlan
             $plan->slug(),                                // slug is immutable
             $name        ?? $plan->name(),
             $description ?? $plan->description(),
-            $isActive    ?? $plan->isActive()
+            $isActive    ?? $plan->isActive(),
+            $plan->metadata(),                            // kept (it used to be lost on update)
+            $plan->accountRef()                           // the owner never changes
         );
 
         $this->planRepo->save($updated);

@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.9.0] - 2026-11-09
+
+Plans owned by an account: an academy sells memberships to its students with its own gateways.
+
+### Upgrade notes
+- Run the ASE migrations: `ase_plans.account_ref`. Existing plans stay platform plans.
+- `listPlans()`, `getActivePlans()` and `PlanRepositoryInterface::findAll()` return platform plans only. Custom repositories must add `findForAccount()`.
+
+### Added
+- `createPlan(..., $accountRef)`, `getAccountPlans($accountRef)` and `deactivatePlanPrice($planPriceId)`.
+- A plan is charged only with the gateways of its own account (platform plans with platform gateways, an academy's plans with that academy's); `createCheckoutSession()` resolves a provider slug within the plan's account. Cancel, pause and order verification use the same rule.
+- Account webhooks reach the subscription flow for that account's plans; an event of a plan of another account is rejected (`PaymentVerificationException`).
+- Subscription events (`subscription.activated`, `renewed`, `payment_failed`, `canceled`, `suspended`) carry `account_ref`, `plan_id`, `plan_slug`, `order_id` and `external_client_id`; `activated` and `renewed` also `amount` and `currency`. `expires_at` is an ISO-8601 string.
+
+### Fixed
+- `updatePlan()` no longer drops the plan's metadata.
+
 ## [1.8.0] - 2026-11-08
 
 ### Added
