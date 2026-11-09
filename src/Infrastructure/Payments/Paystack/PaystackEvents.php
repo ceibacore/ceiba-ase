@@ -11,6 +11,7 @@ use LemurAse\Domain\ValueObjects\MinorUnits;
  *
  * - charge.success  → INITIAL_PAYMENT (amount in the currency's subunit, order from metadata)
  * - refund.processed → REFUND_PROCESSED (full when the refunds cover the transaction)
+ * - charge.dispute.create / charge.dispute.resolve → DISPUTE_OPENED / DISPUTE_CLOSED
  * - anything else   → UNKNOWN (acknowledged, ignored)
  */
 final class PaystackEvents
@@ -26,6 +27,8 @@ final class PaystackEvents
         return match ($type) {
             'charge.success'   => self::charge($data, $event),
             'refund.processed' => self::refund($data, $event, $api),
+            'charge.dispute.create'  => self::dispute('DISPUTE_OPENED', $type, $data, $event),
+            'charge.dispute.resolve' => self::dispute('DISPUTE_CLOSED', $type, $data, $event),
             default            => ['action' => 'UNKNOWN', 'external_id' => self::eventId($type, $data), 'data' => ['raw_payload' => $event]],
         };
     }
@@ -85,6 +88,34 @@ final class PaystackEvents
                 'amount'                  => MinorUnits::fromMinor($refunded, $currency),
                 'currency'                => $currency,
                 'full_refund'             => $charged > 0 && $refunded >= $charged,
+                'raw_payload'             => $event,
+            ],
+        ];
+    }
+
+    private static function dispute(string $action, string $type, array $data, array $event): array
+    {
+        $transaction = is_array($data['transaction'] ?? null) ? $data['transaction'] : [];
+        $currency = strtoupper((string) ($data['currency'] ?? ($transaction['currency'] ?? '')));
+        $metadata = self::metadata($transaction['metadata'] ?? null);
+        // "merchant-accepted": the merchant accepted the claim (refunded); "declined": the merchant won.
+        $outcome = match ((string) ($data['resolution'] ?? '')) {
+            'merchant-accepted' => 'lost',
+            'declined' => 'won',
+            default => null,
+        };
+
+        return [
+            'action'      => $action,
+            'external_id' => self::eventId($type, $data),
+            'data'        => [
+                'external_transaction_id' => (string) ($transaction['reference'] ?? ''),
+                'internal_order_id'       => $metadata['order_id'] ?? null,
+                'dispute_id'              => 'paystack:' . (string) ($data['id'] ?? ''),
+                'amount'                  => $currency !== '' ? MinorUnits::fromMinor($data['refund_amount'] ?? ($transaction['amount'] ?? 0), $currency) : null,
+                'currency'                => $currency,
+                'reason'                  => (string) ($data['category'] ?? ''),
+                'outcome'                 => $outcome,
                 'raw_payload'             => $event,
             ],
         ];

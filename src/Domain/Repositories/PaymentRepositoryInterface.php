@@ -18,4 +18,11 @@ interface PaymentRepositoryInterface
 
     /** @return Payment[] newest first */
     public function findByReference(string $context, string $reference): array;
+
+    /**
+     * Pending payments created before $before (oldest first), to expire them.
+     *
+     * @return Payment[]
+     */
+    public function findStalePending(\DateTimeImmutable $before, int $limit): array;
 }

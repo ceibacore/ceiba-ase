@@ -76,6 +76,18 @@ final class CeibaPaymentRepository implements PaymentRepositoryInterface
         return array_map(fn (array $row) => $this->hydrate($row), $rows ?? []);
     }
 
+    public function findStalePending(\DateTimeImmutable $before, int $limit): array
+    {
+        $rows = CeibaInstance::get()->query(TableNames::PAYMENTS)
+            ->where('status', '=', 'pending')
+            ->where('created_at', '<', $before->format('Y-m-d H:i:s'))
+            ->orderBy('created_at', 'ASC')
+            ->limit(max(1, $limit))
+            ->get();
+
+        return array_map(fn (array $row) => $this->hydrate($row), $rows ?? []);
+    }
+
     private function hydrate(array $row): Payment
     {
         $currency = (string) $row['currency'];
