@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.1] - 2026-11-08
+
+### Fixed
+- `expireStalePayments()` no longer verifies development mock payments (the mock reports every payment as paid), so abandoned mock checkouts expire.
+
 ## [1.7.0] - 2026-11-08
 
 ### Added

@@ -981,7 +981,8 @@ final class AseManager
 
         foreach ($manager->paymentRepo->findStalePending($before, $limit) as $payment) {
             try {
-                $checked = self::verifyPayment($payment->id()->uuid());
+                // The development mock always reports "paid" when asked: never verify it here.
+                $checked = $payment->provider() === 'mock' ? $payment->toArray() : self::verifyPayment($payment->id()->uuid());
                 if (($checked['status'] ?? 'pending') !== 'pending') {
                     $result['verified_paid'] += ($checked['status'] ?? '') === 'paid' ? 1 : 0;
                     continue;
