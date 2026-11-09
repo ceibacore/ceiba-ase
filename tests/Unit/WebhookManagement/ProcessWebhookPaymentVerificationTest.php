@@ -240,6 +240,7 @@ final class MemoryStore
                 public function findAll(bool $onlyActive = false): array { return []; }
                 public function findBySlug(string $slug): ?Plan { return null; }
                 public function existsBySlug(string $slug): bool { return false; }
+                public function findForAccount(string $accountRef, bool $onlyActive = false): array { return []; }
             },
             new class implements GatewayRepositoryInterface {
                 public function save(Gateway $gateway): void {}

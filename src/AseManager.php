@@ -107,6 +107,14 @@ final class AseManager
     {
         $manager = self::getInstance();
 
+        // An academy's plan is charged through that academy's own gateway only.
+        $planAccount = $manager->planAccountOf(EntityId::fromString($planPriceId));
+        if ($planAccount !== null && !\Ramsey\Uuid\Uuid::isValid($gatewayId)) {
+            $gateway = $manager->gatewayRepo->findByProviderForAccount($gatewayId, $planAccount, true)
+                ?? throw new \RuntimeException("Payment gateway '{$gatewayId}' is not enabled for this account.");
+            $gatewayId = $gateway->id()->uuid();
+        }
+
         // Resolve gateway UUID if provider slug (e.g. 'stripe') was passed instead of UUID
         if (!\Ramsey\Uuid\Uuid::isValid($gatewayId)) {
             $gwData = self::getGatewayByProvider($gatewayId);
@@ -131,7 +139,7 @@ final class AseManager
         $order = $useCase->execute($clientId, $planPriceId, $gatewayId);
 
         // Fetch the corresponding gateway adapter with credentials from DB
-        $adapter = $manager->getGatewayAdapter($gatewayId);
+        $adapter = $manager->getGatewayAdapter($gatewayId, $planAccount);
 
         $session = $adapter->createCheckoutSession($order, $successUrl, $cancelUrl);
 
@@ -154,6 +162,15 @@ final class AseManager
         $manager = self::getInstance();
         $useCase = new ExpireStaleOrders($manager->orderRepo);
         return $useCase->execute();
+    }
+
+    /** Owner of the plan behind a plan price (null = platform). */
+    private function planAccountOf(EntityId $planPriceId): ?string
+    {
+        $price = $this->planPriceRepo->findById($planPriceId);
+        $plan = $price ? $this->planRepo->findById($price->planId()) : null;
+
+        return $plan?->accountRef();
     }
 
     /**
@@ -354,7 +371,7 @@ final class AseManager
         }
 
         // 1. Cancel at Gateway level
-        $adapter = $manager->getGatewayAdapter($sub->gatewayId()->uuid());
+        $adapter = $manager->getGatewayAdapter($sub->gatewayId()->uuid(), $manager->planAccountOf($sub->planPriceId()));
         $result = $adapter->cancelSubscription($sub->externalSubscriptionId(), $atPeriodEnd);
 
         if (($result['status'] ?? 'failed') === 'failed') {
@@ -389,7 +406,7 @@ final class AseManager
             throw new \InvalidArgumentException("Subscription not found or does not belong to client.");
         }
 
-        $adapter = $manager->getGatewayAdapter($sub->gatewayId()->uuid());
+        $adapter = $manager->getGatewayAdapter($sub->gatewayId()->uuid(), $manager->planAccountOf($sub->planPriceId()));
         $result = $adapter->pauseSubscription($sub->externalSubscriptionId());
 
         if (($result['status'] ?? 'failed') === 'success') {
@@ -413,11 +430,12 @@ final class AseManager
         string $name,
         ?string $description = null,
         bool $isActive = true,
-        ?array $metadata = null
+        ?array $metadata = null,
+        ?string $accountRef = null
     ): array {
         $manager = self::getInstance();
         $useCase = new CreatePlan($manager->planRepo);
-        $plan = $useCase->execute($slug, $name, $description, $isActive, $metadata);
+        $plan = $useCase->execute($slug, $name, $description, $isActive, $metadata, $accountRef);
 
         return [
             'id' => $plan->id()->uuid(),
@@ -426,7 +444,32 @@ final class AseManager
             'description' => $plan->description(),
             'is_active' => $plan->isActive(),
             'metadata' => $plan->metadata(),
+            'account_ref' => $plan->accountRef(),
         ];
+    }
+
+    /**
+     * Plans of an account (an academy's memberships) with their active prices.
+     *
+     * @return list<array{id: string, slug: string, name: string, is_active: bool, prices: list<array>}>
+     */
+    public static function getAccountPlans(string $accountRef): array
+    {
+        $manager = self::getInstance();
+        $accountRef = (string) \LemurAse\Domain\ValueObjects\AccountRef::normalize($accountRef);
+
+        return array_map(fn ($plan) => [
+            'id' => $plan->id()->uuid(),
+            'slug' => $plan->slug(),
+            'name' => $plan->name(),
+            'is_active' => $plan->isActive(),
+            'metadata' => $plan->metadata(),
+            'prices' => array_map(fn ($price) => [
+                'id' => $price->id()->uuid(), 'type' => $price->type(), 'amount' => $price->price()->amount(),
+                'currency' => $price->price()->currency()->toString(), 'interval' => $price->interval(),
+                'interval_count' => $price->intervalCount(), 'trial_days' => $price->trialDays(),
+            ], $manager->planPriceRepo->findAllActiveByPlanId($plan->id())),
+        ], $manager->planRepo->findForAccount($accountRef));
     }
 
     /**
@@ -478,6 +521,15 @@ final class AseManager
             'trial_days' => $price->trialDays(),
             'is_active' => $price->isActive(),
         ];
+    }
+
+    /** Stops offering a plan price (new checkouts); existing subscriptions keep their price. */
+    public static function deactivatePlanPrice(string $planPriceId): void
+    {
+        \LemurAse\Shared\Infrastructure\CeibaInstance::get()
+            ->query(\LemurAse\Infrastructure\Persistence\TableNames::PLAN_PRICES)
+            ->where(['id' => $planPriceId])
+            ->update(['is_active' => 0]);
     }
 
     /**
@@ -797,7 +849,7 @@ final class AseManager
         AseEventDispatcher::listen($event, $listener);
     }
 
-    private function getGatewayAdapter(string $gatewayId): PaymentGatewayInterface
+    private function getGatewayAdapter(string $gatewayId, ?string $planAccount = null): PaymentGatewayInterface
     {
         $gateway = $this->gatewayRepo->findById(EntityId::fromString($gatewayId));
 
@@ -805,9 +857,10 @@ final class AseManager
             throw new \RuntimeException("Gateway '{$gatewayId}' not found in database.");
         }
 
-        // Plan orders are charged with the platform's gateways only, never an academy's.
-        if ($gateway->accountRef() !== null) {
-            throw new \RuntimeException("Gateway '{$gatewayId}' belongs to an account and cannot charge plan orders.");
+        // A plan is charged with the gateways of its own account: platform plans with the
+        // platform's gateways, an academy's plans with that academy's gateways.
+        if ($gateway->accountRef() !== $planAccount) {
+            throw new \RuntimeException("Gateway '{$gatewayId}' belongs to another account and cannot charge this plan.");
         }
 
         if (!$gateway->isActive()) {
@@ -1059,7 +1112,7 @@ final class AseManager
             return false;
         }
 
-        $adapter = $manager->getGatewayAdapter($order->gatewayId()->uuid());
+        $adapter = $manager->getGatewayAdapter($order->gatewayId()->uuid(), $manager->planAccountOf($order->planPriceId()));
         $eventData = $adapter->verifyTransaction($order->externalOrderId());
 
         if (($eventData['action'] ?? '') === 'INITIAL_PAYMENT') {

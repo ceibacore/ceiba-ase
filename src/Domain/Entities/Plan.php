@@ -12,7 +12,8 @@ final class Plan extends AggregateRoot
         private string $name,
         private ?string $description = null,
         private bool $isActive = true,
-        private ?array $metadata = null
+        private ?array $metadata = null,
+        private ?string $accountRef = null
     ) {
         parent::__construct($id);
     }
@@ -21,6 +22,9 @@ final class Plan extends AggregateRoot
     public function name(): string { return $this->name; }
     public function description(): ?string { return $this->description; }
     public function isActive(): bool { return $this->isActive; }
+
+    /** Owner of the plan: null = platform, 'tenant:{id}' = an academy. */
+    public function accountRef(): ?string { return $this->accountRef; }
     
     /**
      * Get custom metadata attributes (JSON decoded).

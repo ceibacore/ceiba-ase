@@ -27,7 +27,8 @@ final class CreatePlan
         string  $name,
         ?string $description = null,
         bool    $isActive    = true,
-        ?array  $metadata    = null
+        ?array  $metadata    = null,
+        ?string $accountRef  = null
     ): Plan {
         if ($this->planRepo->existsBySlug($slug)) {
             throw new \InvalidArgumentException("Plan slug '{$slug}' already exists.");
@@ -39,7 +40,8 @@ final class CreatePlan
             $name,
             $description,
             $isActive,
-            $metadata
+            $metadata,
+            \LemurAse\Domain\ValueObjects\AccountRef::normalize($accountRef)
         );
 
         $this->planRepo->save($plan);

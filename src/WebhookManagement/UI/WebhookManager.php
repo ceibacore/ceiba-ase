@@ -2,6 +2,8 @@
 
 namespace LemurAse\WebhookManagement\UI;
 
+use LemurAse\WebhookManagement\Domain\PaymentVerificationException;
+
 use LemurAse\AseManager;
 use LemurAse\Application\UseCases\ProcessPaymentEvent;
 use LemurAse\Domain\Entities\Payment;
@@ -84,6 +86,16 @@ final class WebhookManager
         if ($payment !== null) {
             return (new ProcessPaymentEvent($ase->paymentRepo, $ase->logRepo))->execute($payment, $event, $accountRef);
         }
+        // 4. Subscription flow: an account's own plans (memberships) or the platform's plans.
+        //    Each URL only reaches the plans of its own account.
+        $owner = self::subscriptionAccount($event);
+        if ($owner !== false) {
+            if ($owner !== $accountRef) {
+                throw new PaymentVerificationException(sprintf('Event %s belongs to a plan of another account.', $event->externalId));
+            }
+            return self::createUseCase()->execute($event);
+        }
+
         if ($accountRef !== null) {
             // Acknowledged (the provider must not retry forever) but kept for reconciliation.
             if ($event->action !== 'UNKNOWN') {
@@ -101,8 +113,33 @@ final class WebhookManager
             return true;
         }
 
-        // 4. Plan subscription flow (platform account)
+        // 5. Platform events of plans not known yet (e.g. a subscription created at the provider).
         return self::createUseCase()->execute($event);
+    }
+
+    /**
+     * Account of the plan an event refers to (through its order or subscription), or false
+     * when it refers to none.
+     */
+    private static function subscriptionAccount(WebhookEvent $event): string|null|false
+    {
+        $ase = AseManager::getInstance();
+        $planPriceId = null;
+        $orderId = (string) ($event->data['internal_order_id'] ?? '');
+        if ($orderId !== '' && Uuid::isValid($orderId) && ($order = $ase->orderRepo->findById(EntityId::fromString($orderId))) !== null) {
+            $planPriceId = $order->planPriceId();
+        }
+        $externalSubscription = (string) ($event->data['external_subscription_id'] ?? '');
+        if ($planPriceId === null && $externalSubscription !== '' && ($sub = $ase->subscriptionRepo->findByExternalId($externalSubscription)) !== null) {
+            $planPriceId = $sub->planPriceId();
+        }
+        if ($planPriceId === null) {
+            return false;
+        }
+        $price = $ase->planPriceRepo->findById($planPriceId);
+        $plan = $price ? $ase->planRepo->findById($price->planId()) : null;
+
+        return $plan ? $plan->accountRef() : false;
     }
 
     /** The payment an event refers to: by its id (sent as the order reference), then by provider ids. */

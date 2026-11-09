@@ -326,13 +326,13 @@ final class PaymentsWithContextTest extends TestCase
         $this->assertContains('Authorization: Bearer sk_test_academy7_stripe', $headers);
     }
 
-    public function testPlanOrdersNeverUseAnAcademyGateway(): void
+    public function testPlatformPlansNeverUseAnAcademyGateway(): void
     {
         $plan = AseManager::createPlan('pro', 'Pro');
         $price = AseManager::createPlanPrice($plan['id'], 'one_time', 10.00, 'NGN');
         $academyGatewayId = AseManager::getGatewayCredentialsByProvider('paystack', self::ACADEMY)['gateway_id'];
 
-        $this->expectExceptionMessage('belongs to an account');
+        $this->expectExceptionMessage('belongs to another account');
         AseManager::createCheckoutSession('owner-1', $price['id'], $academyGatewayId, 'https://x.test/ok', 'https://x.test/no');
     }
 
