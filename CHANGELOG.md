@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] - 2026-11-08
+
+### Added
+- Authentic events of an account that match no payment (sales made outside ceiba, events of deleted payments) are recorded in the outbox as `webhook.unmatched` (provider, account, external id, action, amount, currency, reference) for reconciliation. They are still acknowledged to the provider.
+
 ## [1.7.1] - 2026-11-08
 
 ### Fixed
