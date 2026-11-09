@@ -966,6 +966,39 @@ final class AseManager
     }
 
     /**
+     * Expires one-time payments still pending after $olderThanSeconds (checkout abandoned).
+     * Each one is first verified with its provider, so a payment whose webhook never
+     * arrived is settled instead of expired. Emits payment.expired for the rest.
+     *
+     * @return array{verified_paid: int, expired: int}
+     */
+    public static function expireStalePayments(int $olderThanSeconds = 86400, int $limit = 100): array
+    {
+        $manager = self::getInstance();
+        $before = (new \DateTimeImmutable())->modify('-' . max(60, $olderThanSeconds) . ' seconds');
+        $useCase = new \LemurAse\Application\UseCases\ProcessPaymentEvent($manager->paymentRepo, $manager->logRepo);
+        $result = ['verified_paid' => 0, 'expired' => 0];
+
+        foreach ($manager->paymentRepo->findStalePending($before, $limit) as $payment) {
+            try {
+                $checked = self::verifyPayment($payment->id()->uuid());
+                if (($checked['status'] ?? 'pending') !== 'pending') {
+                    $result['verified_paid'] += ($checked['status'] ?? '') === 'paid' ? 1 : 0;
+                    continue;
+                }
+            } catch (\Throwable $e) {
+                error_log("ASE: could not verify stale payment {$payment->id()->uuid()} before expiring it: {$e->getMessage()}");
+            }
+            $fresh = $manager->paymentRepo->findById($payment->id());
+            if ($fresh !== null && $useCase->expire($fresh)) {
+                $result['expired']++;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
      * Checks credentials with a harmless call to the provider before they are enabled.
      * Credentials that cannot even build an adapter (missing fields) fail here too.
      *

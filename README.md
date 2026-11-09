@@ -1031,6 +1031,21 @@ $session = AseManager::createPayment(new PaymentRequest(
 AseManager::handleWebhook('paystack', $rawBody, $headers, AccountRef::tenant($tenantId));
 ```
 
-Outcomes arrive as outbox events (`ase_outbox_events`): `payment.succeeded`, `payment.failed`,
-`payment.refunded`, with `payment_id`, `context`, `reference`, `account_ref`, `amount_minor`
-and `currency`. Refunds: `AseManager::refundPayment($paymentId, ?$amount, $reason)`.
+Outcomes arrive as outbox events (`ase_outbox_events`), with `payment_id`, `context`,
+`reference`, `account_ref`, `status`, `amount_minor` and `currency`:
+
+| Event | When | Extra fields |
+|---|---|---|
+| `payment.succeeded` | The provider charged at least the amount. | `external_payment_id`, `paid_at` |
+| `payment.failed` | The charge was declined. | |
+| `payment.expired` | Still pending after `expireStalePayments()` (verified with the provider first). A late charge still settles it. | |
+| `payment.refunded` | Total or partial refund (API, webhook or provider dashboard). | `refund_id`, `refund_minor`, `refunded_minor`, `full` |
+| `payment.disputed` | A chargeback was opened. | `dispute_id`, `dispute_minor`, `reason` |
+| `payment.dispute_closed` | The dispute was won or lost (lost: status `charged_back`). | `dispute_id`, `dispute_minor`, `outcome` |
+
+Refunds: `AseManager::refundPayment($paymentId, ?$amount, $reason)`. Schedule
+`AseManager::expireStalePayments($olderThanSeconds, $limit)` (for example hourly).
+
+Disputes are read from Stripe (`charge.dispute.created/closed`), PayPal
+(`CUSTOMER.DISPUTE.CREATED/RESOLVED`), Paystack (`charge.dispute.create/resolve`) and
+Razorpay (`payment.dispute.created/won/lost`). Subscribe the account's webhook to them.

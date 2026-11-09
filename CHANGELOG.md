@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] - 2026-11-08
+
+### Added
+- Disputes of one-time payments: `payment.disputed` and `payment.dispute_closed` (outcome `won` or `lost`; a lost dispute sets the payment to `charged_back`). Mapped from Stripe, PayPal, Paystack and Razorpay. Each dispute is reported once.
+- `AseManager::expireStalePayments($olderThanSeconds = 86400, $limit = 100)`: verifies stale pending payments with their provider (settling those whose webhook was lost) and expires the rest with `payment.expired`. An expired payment completed late is still settled.
+- PayPal `PAYMENT.CAPTURE.REFUNDED` webhooks apply refunds of one-time payments, including refunds made in PayPal's dashboard.
+
+### Changed
+- Payment statuses: `expired` and `charged_back` were added. `PaymentRepositoryInterface` gains `findStalePending()`.
+
 ## [1.6.0] - 2026-11-08
 
 ### Added

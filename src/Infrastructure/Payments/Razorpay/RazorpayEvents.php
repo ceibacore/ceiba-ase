@@ -12,6 +12,7 @@ use LemurAse\Infrastructure\Http\RequestHeaders;
  *
  * - payment_link.paid → INITIAL_PAYMENT (order from reference_id)
  * - refund.processed  → REFUND_PROCESSED (order from the refund or payment notes)
+ * - payment.dispute.created / .won / .lost → DISPUTE_OPENED / DISPUTE_CLOSED
  * - anything else     → UNKNOWN (acknowledged, ignored)
  */
 final class RazorpayEvents
@@ -28,6 +29,9 @@ final class RazorpayEvents
         return match ($type) {
             'payment_link.paid' => self::paid($payload, $event, $eventId),
             'refund.processed'  => self::refund($payload, $event, $eventId),
+            'payment.dispute.created' => self::dispute('DISPUTE_OPENED', null, $type, $payload, $event, $eventId),
+            'payment.dispute.won'     => self::dispute('DISPUTE_CLOSED', 'won', $type, $payload, $event, $eventId),
+            'payment.dispute.lost'    => self::dispute('DISPUTE_CLOSED', 'lost', $type, $payload, $event, $eventId),
             default             => ['action' => 'UNKNOWN', 'external_id' => self::eventId($eventId, $type, $payload), 'data' => ['raw_payload' => $event]],
         };
     }
@@ -96,6 +100,29 @@ final class RazorpayEvents
         ];
     }
 
+    private static function dispute(string $action, ?string $outcome, string $type, array $payload, array $event, string $eventId): array
+    {
+        $dispute = $payload['dispute']['entity'] ?? [];
+        $payment = $payload['payment']['entity'] ?? [];
+        $currency = strtoupper((string) ($dispute['currency'] ?? ($payment['currency'] ?? '')));
+        $notes = is_array($payment['notes'] ?? null) ? $payment['notes'] : [];
+
+        return [
+            'action'      => $action,
+            'external_id' => self::eventId($eventId, $type, $payload),
+            'data'        => [
+                'external_transaction_id' => (string) ($dispute['payment_id'] ?? ($payment['id'] ?? '')),
+                'internal_order_id'       => $notes['order_id'] ?? null,
+                'dispute_id'              => (string) ($dispute['id'] ?? ''),
+                'amount'                  => $currency !== '' ? MinorUnits::fromMinor($dispute['amount'] ?? 0, $currency) : null,
+                'currency'                => $currency,
+                'reason'                  => (string) ($dispute['reason_code'] ?? ''),
+                'outcome'                 => $outcome,
+                'raw_payload'             => $event,
+            ],
+        ];
+    }
+
     /** X-Razorpay-Event-Id identifies a delivery uniquely; retries reuse it. */
     private static function eventId(string $headerId, string $type, array $payload): string
     {
@@ -103,7 +130,7 @@ final class RazorpayEvents
             return "razorpay:{$headerId}";
         }
         $entityId = '';
-        foreach (['refund', 'payment', 'payment_link'] as $entity) {
+        foreach (['dispute', 'refund', 'payment', 'payment_link'] as $entity) {
             if (!empty($payload[$entity]['entity']['id'])) {
                 $entityId = (string) $payload[$entity]['entity']['id'];
                 break;

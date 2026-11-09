@@ -69,6 +69,8 @@ final class StripeWebhookAdapter implements WebhookAdapterInterface
             'customer.subscription.deleted' => 'SUBSCRIPTION_CANCELED',
             'customer.subscription.updated' => 'SUBSCRIPTION_UPDATED',
             'charge.refunded'            => 'REFUND_PROCESSED',
+            'charge.dispute.created'     => 'DISPUTE_OPENED',
+            'charge.dispute.closed'      => 'DISPUTE_CLOSED',
             default => 'UNKNOWN'
         };
     }
@@ -101,6 +103,16 @@ final class StripeWebhookAdapter implements WebhookAdapterInterface
             $normalized['refund_reference'] = $data['payment_intent'] ?? null;
             $normalized['full_refund'] = (bool) ($data['refunded'] ?? false);
             $normalized['refunded_total'] = MinorUnits::fromMinor($data['amount_refunded'] ?? 0, (string) ($data['currency'] ?? 'usd'));
+        }
+
+        // Disputes: the object is the dispute; the payment is found by its payment intent.
+        if ($action === 'DISPUTE_OPENED' || $action === 'DISPUTE_CLOSED') {
+            $normalized['external_subscription_id'] = null;
+            $normalized['refund_reference'] = $data['payment_intent'] ?? null;
+            $normalized['dispute_id'] = (string) ($data['id'] ?? '');
+            $normalized['reason'] = (string) ($data['reason'] ?? '');
+            // won | lost; warning_closed (inquiry closed without a chargeback) is not an outcome.
+            $normalized['outcome'] = in_array($data['status'] ?? '', ['won', 'lost'], true) ? $data['status'] : null;
         }
 
         // Specific mappings for SUBSCRIPTION_UPDATED

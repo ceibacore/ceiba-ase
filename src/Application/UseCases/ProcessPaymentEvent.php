@@ -16,7 +16,9 @@ use LemurAse\WebhookManagement\Domain\WebhookEvent;
 
 /**
  * Applies a verified provider event to a one-time payment and records the outcome in
- * the outbox (payment.succeeded | payment.failed | payment.refunded), in one transaction.
+ * the outbox, in one transaction:
+ *   payment.succeeded | payment.failed | payment.refunded | payment.disputed |
+ *   payment.dispute_closed (outcome won|lost) | payment.expired (expire()).
  *
  * - The event must come through the payment's own account (a webhook of academy A can
  *   never settle a payment of academy B or of the platform).
@@ -36,7 +38,7 @@ final class ProcessPaymentEvent
         if ($payment->accountRef() !== $accountRef) {
             throw new PaymentVerificationException("Payment {$payment->id()->uuid()} does not belong to the account that sent this event.");
         }
-        if (!in_array($event->action, ['INITIAL_PAYMENT', 'PAYMENT_FAILED', 'REFUND_PROCESSED'], true)) {
+        if (!in_array($event->action, ['INITIAL_PAYMENT', 'PAYMENT_FAILED', 'REFUND_PROCESSED', 'DISPUTE_OPENED', 'DISPUTE_CLOSED'], true)) {
             return true;
         }
         if ($this->log->exists($event->externalId)) {
@@ -48,6 +50,8 @@ final class ProcessPaymentEvent
                 'INITIAL_PAYMENT'  => $this->settle($payment, $event->data),
                 'PAYMENT_FAILED'   => $this->fail($payment),
                 'REFUND_PROCESSED' => $this->refund($payment, $event->data),
+                'DISPUTE_OPENED'   => $this->disputeOpened($payment, $event->data),
+                'DISPUTE_CLOSED'   => $this->disputeClosed($payment, $event->data),
             };
             $this->record($payment, $event);
 
@@ -67,12 +71,28 @@ final class ProcessPaymentEvent
         });
     }
 
+    /** Expires a payment still pending (nobody completed it in time). */
+    public function expire(Payment $payment): bool
+    {
+        return CeibaInstance::get()->transaction(function () use ($payment): bool {
+            if ($payment->status() !== 'pending') {
+                return false;
+            }
+            $payment->markExpired();
+            $this->payments->save($payment);
+            $this->emit('payment.expired', $payment);
+
+            return true;
+        });
+    }
+
     private function settle(Payment $payment, array $data): void
     {
         if ($payment->status() === 'paid') {
             return;
         }
-        if (!in_array($payment->status(), ['pending', 'failed'], true)) {
+        // An expired payment completed late was still charged: it is settled.
+        if (!in_array($payment->status(), ['pending', 'failed', 'expired'], true)) {
             throw new PaymentVerificationException("Payment {$payment->id()->uuid()} is {$payment->status()}; payment not applied.");
         }
         $currency = strtoupper(trim((string) ($data['currency'] ?? '')));
@@ -135,6 +155,65 @@ final class ProcessPaymentEvent
         ]);
     }
 
+    /** A cardholder disputed the charge (chargeback opened). */
+    private function disputeOpened(Payment $payment, array $data): void
+    {
+        $disputeId = (string) ($data['dispute_id'] ?? '');
+        if ($disputeId === '' || !in_array($payment->status(), ['paid', 'partially_refunded', 'refunded'], true)) {
+            return;
+        }
+        $metadata = $payment->metadata();
+        if (isset($metadata['disputes'][$disputeId])) {
+            return; // already known
+        }
+        $minor = $this->disputeMinor($payment, $data);
+        $metadata['disputes'][$disputeId] = ['status' => 'open', 'amount_minor' => $minor, 'reason' => (string) ($data['reason'] ?? '')];
+        $payment->replaceMetadata($metadata);
+        $this->payments->save($payment);
+        $this->emit('payment.disputed', $payment, [
+            'dispute_id' => $disputeId,
+            'dispute_minor' => $minor,
+            'reason' => (string) ($data['reason'] ?? ''),
+        ]);
+    }
+
+    /** The provider closed a dispute: won (money kept) or lost (money taken back). */
+    private function disputeClosed(Payment $payment, array $data): void
+    {
+        $disputeId = (string) ($data['dispute_id'] ?? '');
+        $outcome = (string) ($data['outcome'] ?? '');
+        if ($disputeId === '' || !in_array($outcome, ['won', 'lost'], true)) {
+            return; // still under review (e.g. Stripe warning_closed, PayPal other outcomes)
+        }
+        $metadata = $payment->metadata();
+        $known = $metadata['disputes'][$disputeId] ?? null;
+        if ($known !== null && $known['status'] !== 'open') {
+            return; // already closed
+        }
+        $minor = (int) ($known['amount_minor'] ?? $this->disputeMinor($payment, $data));
+        $metadata['disputes'][$disputeId] = ['status' => $outcome, 'amount_minor' => $minor, 'reason' => (string) ($known['reason'] ?? ($data['reason'] ?? ''))];
+        $payment->replaceMetadata($metadata);
+        if ($outcome === 'lost') {
+            $payment->markChargedBack();
+        }
+        $this->payments->save($payment);
+        $this->emit('payment.dispute_closed', $payment, [
+            'dispute_id' => $disputeId,
+            'dispute_minor' => $minor,
+            'outcome' => $outcome,
+        ]);
+    }
+
+    private function disputeMinor(Payment $payment, array $data): int
+    {
+        $currency = strtoupper((string) ($data['currency'] ?? $payment->currency()));
+        if (isset($data['amount']) && is_numeric($data['amount']) && $currency === $payment->currency()) {
+            return min($payment->amountMinor(), MinorUnits::toMinor($data['amount'], $currency));
+        }
+
+        return $payment->amountMinor();
+    }
+
     private function emit(string $name, Payment $payment, array $extra = []): void
     {
         AseEventDispatcher::dispatchReliably($name, [
@@ -162,7 +241,7 @@ final class ProcessPaymentEvent
             'external_client_id' => $payment->externalClientId(),
             'gateway_id' => $payment->gatewayId()->uuid(),
             'external_transaction_id' => $event->externalId,
-            'type' => $event->action === 'REFUND_PROCESSED' ? 'refund' : 'payment',
+            'type' => match ($event->action) { 'REFUND_PROCESSED' => 'refund', 'DISPUTE_OPENED', 'DISPUTE_CLOSED' => 'chargeback', default => 'payment' },
             'amount' => is_numeric($amount) ? (float) $amount : 0,
             'status' => $event->action === 'PAYMENT_FAILED' ? 'failed' : 'success',
             'security_hash' => hash('sha256', $event->externalId . '|' . $payment->id()->uuid()),

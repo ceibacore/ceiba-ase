@@ -29,7 +29,7 @@ class Migration_20261108000001_CreatePaymentsTable extends AseBaseMigration
             $t->bigInteger('amount_minor')->notNull();
             $t->char('currency', 3)->notNull();
             $t->string('description', 255)->notNull();
-            $t->string('status', 30)->default('pending'); // pending|paid|failed|refunded|partially_refunded
+            $t->string('status', 30)->default('pending'); // pending|paid|failed|expired|refunded|partially_refunded|charged_back
             $t->string('external_id', 255)->nullable();
             $t->string('external_payment_id', 255)->nullable();
             $t->bigInteger('refunded_minor')->default(0);

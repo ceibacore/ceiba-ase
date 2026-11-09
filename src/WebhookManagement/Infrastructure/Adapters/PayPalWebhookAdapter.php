@@ -98,6 +98,13 @@ final class PayPalWebhookAdapter implements WebhookAdapterInterface
             return $this->approvedOrder($orders, $resource, $decoded, $eventId);
         }
 
+        if ($eventType === 'PAYMENT.CAPTURE.REFUNDED') {
+            return self::captureRefund($resource, $decoded, $eventId);
+        }
+        if ($eventType === 'CUSTOMER.DISPUTE.CREATED' || $eventType === 'CUSTOMER.DISPUTE.RESOLVED') {
+            return self::dispute($eventType, $resource, $decoded, $eventId);
+        }
+
         $action = match ($eventType) {
             'PAYMENT.CAPTURE.COMPLETED'      => 'INITIAL_PAYMENT',
             'BILLING.SUBSCRIPTION.CREATED'   => 'SUBSCRIPTION_CREATED',
@@ -121,6 +128,56 @@ final class PayPalWebhookAdapter implements WebhookAdapterInterface
 
         return new WebhookEvent(action: $action, data: $normalizedData, externalId: $eventId,
             provider: 'paypal', rawPayload: $decoded);
+    }
+
+    /**
+     * A refund of a one-time payment's capture (also refunds made in PayPal's dashboard).
+     * The capture is the "up" link of the refund.
+     */
+    private static function captureRefund(array $resource, array $decoded, string $eventId): WebhookEvent
+    {
+        $captureId = '';
+        foreach ((array) ($resource['links'] ?? []) as $link) {
+            if (($link['rel'] ?? '') === 'up' && preg_match('#/captures/([A-Za-z0-9-]+)#', (string) ($link['href'] ?? ''), $m)) {
+                $captureId = $m[1];
+            }
+        }
+        $currency = strtoupper((string) ($resource['amount']['currency_code'] ?? ''));
+        $total = $resource['seller_payable_breakdown']['total_refunded_amount']['value'] ?? null;
+
+        return new WebhookEvent(action: 'REFUND_PROCESSED', data: [
+            'refund_reference'   => $captureId,
+            'external_transaction_id' => $captureId,
+            'internal_order_id'  => $resource['custom_id'] ?? null,
+            'external_refund_id' => 'paypal:refund:' . (string) ($resource['id'] ?? $eventId),
+            'amount'             => (float) ($resource['amount']['value'] ?? 0),
+            'currency'           => $currency,
+            'refunded_total'     => is_numeric($total) ? (float) $total : null,
+            'raw_payload'        => $decoded,
+        ], externalId: $eventId, provider: 'paypal', rawPayload: $decoded);
+    }
+
+    /** Disputes (chargebacks and PayPal claims) of a capture. */
+    private static function dispute(string $type, array $resource, array $decoded, string $eventId): WebhookEvent
+    {
+        $transaction = (array) (($resource['disputed_transactions'] ?? [])[0] ?? []);
+        $outcome = match ($resource['dispute_outcome']['outcome_code'] ?? '') {
+            'RESOLVED_SELLER_FAVOUR', 'CANCELED_BY_BUYER' => 'won',
+            'RESOLVED_BUYER_FAVOUR' => 'lost',
+            default => null,
+        };
+
+        return new WebhookEvent(action: $type === 'CUSTOMER.DISPUTE.CREATED' ? 'DISPUTE_OPENED' : 'DISPUTE_CLOSED', data: [
+            'refund_reference'  => (string) ($transaction['seller_transaction_id'] ?? ''),
+            'external_transaction_id' => (string) ($transaction['seller_transaction_id'] ?? ''),
+            'internal_order_id' => $transaction['custom'] ?? null,
+            'dispute_id'        => (string) ($resource['dispute_id'] ?? ''),
+            'amount'            => (float) ($resource['dispute_amount']['value'] ?? 0),
+            'currency'          => strtoupper((string) ($resource['dispute_amount']['currency_code'] ?? '')),
+            'reason'            => (string) ($resource['reason'] ?? ''),
+            'outcome'           => $outcome,
+            'raw_payload'       => $decoded,
+        ], externalId: $eventId, provider: 'paypal', rawPayload: $decoded);
     }
 
     /** Approval is not payment: capture the order and activate only a COMPLETED capture. */

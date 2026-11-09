@@ -58,6 +58,8 @@ final class ProcessWebhookUseCase
                 'SUBSCRIPTION_UPDATED'  => $this->handleSubscriptionUpdated($data),
                 'REFUND_PROCESSED'      => $this->handleRefund($data),
                 'UNKNOWN'               => true, // Gracefully ignore unhandled events
+                // Disputes of plan charges are handled in the provider's dashboard.
+                'DISPUTE_OPENED', 'DISPUTE_CLOSED' => error_log("ASE webhook: dispute {$event->externalId} of a plan charge; review it with the provider.") || true,
                 default => throw new \InvalidArgumentException("Unhandled webhook action: {$action}")
             };
 

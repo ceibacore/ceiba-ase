@@ -15,7 +15,7 @@ use LemurAse\Domain\ValueObjects\Money;
  */
 final class Payment extends AggregateRoot implements Chargeable
 {
-    public const STATUSES = ['pending', 'paid', 'failed', 'refunded', 'partially_refunded'];
+    public const STATUSES = ['pending', 'paid', 'failed', 'expired', 'refunded', 'partially_refunded', 'charged_back'];
 
     public function __construct(
         EntityId $id,
@@ -82,6 +82,26 @@ final class Payment extends AggregateRoot implements Chargeable
         if ($this->status === 'pending') {
             $this->status = 'failed';
         }
+    }
+
+    /** A pending payment nobody completed in time. A late confirmation can still settle it. */
+    public function markExpired(): void
+    {
+        if ($this->status === 'pending') {
+            $this->status = 'expired';
+        }
+    }
+
+    /** The cardholder won a dispute: the provider took the money back. */
+    public function markChargedBack(): void
+    {
+        $this->status = 'charged_back';
+    }
+
+    /** Replaces the metadata (dispute and refund bookkeeping). */
+    public function replaceMetadata(array $metadata): void
+    {
+        $this->metadata = $metadata;
     }
 
     /** Adds a refund; returns true when the payment is now fully refunded. */
