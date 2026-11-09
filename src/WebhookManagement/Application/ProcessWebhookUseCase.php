@@ -136,7 +136,7 @@ final class ProcessWebhookUseCase
             'status'             => $status,
             'amount'             => (float) $data['amount'],
             'currency'           => strtoupper($order->amount()->currency()->toString()),
-            'expires_at'         => $periodEnd->format(DATE_ATOM),
+            'expires_at'         => $periodEnd?->format(DATE_ATOM), // null: one-time price, no expiry
         ], 'subscription', $subId->uuid());
     }
 
@@ -189,7 +189,7 @@ final class ProcessWebhookUseCase
             'amount'          => (float) ($data['amount'] ?? 0),
             'currency'        => strtoupper((string) ($data['currency'] ?? $order?->amount()->currency()->toString() ?? '')),
             'invoice_reference' => (string) ($data['external_transaction_id'] ?? ''),
-            'expires_at'      => $newEnd->format(DATE_ATOM),
+            'expires_at'      => $newEnd?->format(DATE_ATOM),
         ], 'subscription', $subscription->id()->uuid());
     }
 
@@ -258,7 +258,7 @@ final class ProcessWebhookUseCase
         if ($newStatus === 'canceled') {
             AseEventDispatcher::dispatch('subscription.canceled', $this->subscriptionContext($subscription) + [
                 'immediate'       => false,
-                'expires_at'      => $periodEnd->format(DATE_ATOM),
+                'expires_at'      => $periodEnd?->format(DATE_ATOM),
             ], 'subscription', $subscription->id()->uuid());
         } elseif ($newStatus === 'past_due' || $newStatus === 'suspended') {
             AseEventDispatcher::dispatch('subscription.suspended', $this->subscriptionContext($subscription) + [

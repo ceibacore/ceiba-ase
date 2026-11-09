@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.9.1] - 2026-11-09
+
+### Fixed
+- Activating a plan with a one-time price failed (`expires_at` of a period without end); it is now `null`.
+
 ## [1.9.0] - 2026-11-09
 
 Plans owned by an account: an academy sells memberships to its students with its own gateways.
