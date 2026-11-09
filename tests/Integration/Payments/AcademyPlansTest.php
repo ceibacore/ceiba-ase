@@ -132,4 +132,15 @@ final class AcademyPlansTest extends TestCase
         $this->expectExceptionMessage('belongs to another account');
         AseManager::createCheckoutSession('academy:7:user:5:product:3', $price['id'], $platformGateway, 'https://x.test/ok', 'https://x.test/no');
     }
+
+    public function testPlansWithAOneTimePriceActivateWithoutExpiry(): void
+    {
+        $plan = AseManager::createPlan('tenant-7-lifetime', 'Acceso de por vida', null, true, null, self::ACADEMY);
+        $price = AseManager::createPlanPrice($plan['id'], 'one_time', 15000.00, 'NGN');
+        $orderId = $this->checkout($price['id']);
+
+        $this->assertTrue($this->charge($orderId, self::ACADEMY, self::SECRET));
+        $payload = json_decode((string) $this->pdo->query("SELECT payload FROM ase_outbox_events WHERE event_name = 'subscription.activated'")->fetchColumn(), true);
+        $this->assertNull($payload['expires_at']);
+    }
 }
