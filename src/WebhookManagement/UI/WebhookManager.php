@@ -38,7 +38,8 @@ final class WebhookManager
      *  - the one-time payment it refers to (ase_payments), which must belong to that same
      *    account (ProcessPaymentEvent);
      *  - otherwise, for the platform account only, the plan subscription flow.
-     * Events of an account that match no payment are acknowledged and ignored (orphans).
+     * Events of an account that match no payment are acknowledged and recorded in the outbox
+     * as webhook.unmatched (orphans, for reconciliation).
      *
      * @param string $payload Raw body from request
      * @param array  $headers Headers from request
@@ -84,7 +85,19 @@ final class WebhookManager
             return (new ProcessPaymentEvent($ase->paymentRepo, $ase->logRepo))->execute($payment, $event, $accountRef);
         }
         if ($accountRef !== null) {
-            error_log(sprintf('ASE webhook: %s event %s of account %s matches no payment; ignored.', $providerKey, $event->externalId, $accountRef));
+            // Acknowledged (the provider must not retry forever) but kept for reconciliation.
+            if ($event->action !== 'UNKNOWN') {
+                \LemurAse\Infrastructure\Events\AseEventDispatcher::recordOutbox('webhook.unmatched', [
+                    'provider' => $providerKey,
+                    'account_ref' => $accountRef,
+                    'external_id' => $event->externalId,
+                    'action' => $event->action,
+                    'amount' => $event->data['amount'] ?? null,
+                    'currency' => $event->data['currency'] ?? null,
+                    'reference' => (string) ($event->data['internal_order_id'] ?? $event->data['refund_reference'] ?? $event->data['external_transaction_id'] ?? ''),
+                ], 'webhook', $providerKey . ':' . $event->externalId);
+            }
+            error_log(sprintf('ASE webhook: %s event %s of account %s matches no payment; recorded as webhook.unmatched.', $providerKey, $event->externalId, $accountRef));
             return true;
         }
 

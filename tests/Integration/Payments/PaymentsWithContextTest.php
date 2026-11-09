@@ -221,14 +221,17 @@ final class PaymentsWithContextTest extends TestCase
         $this->charge($paymentId, 1500000, 9005, 'sk_test_platform_0123456789abcdef', null);
     }
 
-    public function testAccountEventsWithoutPaymentAreIgnoredAndUnknownAccountsRejected(): void
+    public function testAccountEventsWithoutPaymentAreRecordedAndUnknownAccountsRejected(): void
     {
         $raw = json_encode(['event' => 'charge.success', 'data' => ['id' => 1, 'status' => 'success', 'reference' => 'external-sale',
             'amount' => 100, 'currency' => 'NGN', 'metadata' => []]]);
         $headers = ['x-paystack-signature' => hash_hmac('sha512', $raw, self::ACADEMY_SECRET)];
 
         $this->assertTrue(AseManager::handleWebhook('paystack', $raw, $headers, self::ACADEMY), 'Sale made outside ceiba: acknowledged');
-        $this->assertSame([], $this->outbox());
+        $outbox = $this->outbox();
+        $this->assertSame(['webhook.unmatched'], array_column($outbox, 0), 'Kept for reconciliation');
+        $this->assertEquals(['paystack', self::ACADEMY, 'INITIAL_PAYMENT', 1.0, 'NGN', 'external-sale'], [$outbox[0][1]['provider'],
+            $outbox[0][1]['account_ref'], $outbox[0][1]['action'], $outbox[0][1]['amount'], $outbox[0][1]['currency'], $outbox[0][1]['reference']]);
 
         $this->expectException(\InvalidArgumentException::class);
         AseManager::handleWebhook('paystack', $raw, $headers, 'tenant:404');
