@@ -156,4 +156,17 @@ final class DisputesAndExpiryTest extends TestCase
         $this->pay($abandoned, 'order-4', 40);
         $this->assertSame('paid', AseManager::getPayment($abandoned)['status']);
     }
+
+    public function testMockPaymentsExpireWithoutAskingTheMock(): void
+    {
+        AseManager::upsertGateway('mock', [], true);
+        $id = AseManager::createPayment(new PaymentRequest(
+            context: 'marketplace', reference: 'order-9', externalClientId: 'student-5', amount: 10.00, currency: 'USD',
+            provider: 'mock', description: 'Curso', successUrl: 'https://campus.test/ok', cancelUrl: 'https://campus.test/no',
+        ))['payment_id'];
+        $this->pdo->exec("UPDATE ase_payments SET created_at = '2026-01-01 00:00:00' WHERE id = '{$id}'");
+
+        $this->assertSame(['verified_paid' => 0, 'expired' => 1], AseManager::expireStalePayments(3600));
+        $this->assertSame('expired', AseManager::getPayment($id)['status']);
+    }
 }
